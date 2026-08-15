@@ -1,0 +1,51 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  windows-release:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Test
+        run: |
+          npm run lint
+          npm test
+          cargo test --manifest-path src-tauri/Cargo.toml
+      - name: Build Windows bundles
+        run: npm run tauri build
+      - name: Create checksums
+        shell: pwsh
+        run: |
+          $files = @(
+            "src-tauri/target/release/grok-desk.exe",
+            "src-tauri/target/release/bundle/msi/Grok Desk_0.1.0_x64_en-US.msi",
+            "src-tauri/target/release/bundle/nsis/Grok Desk_0.1.0_x64-setup.exe"
+          )
+          $lines = foreach ($file in $files) {
+            $hash = (Get-FileHash -Algorithm SHA256 -LiteralPath $file).Hash.ToLowerInvariant()
+            "$hash  $([IO.Path]::GetFileName($file))"
+          }
+          Set-Content -LiteralPath SHA256SUMS.txt -Value $lines -Encoding ascii
+      - name: Publish GitHub Release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create $env:GITHUB_REF_NAME `
+            --title "Grok Desk $env:GITHUB_REF_NAME" `
+            --notes-file docs/RELEASE_NOTES_0.1.0.md `
+            "src-tauri/target/release/grok-desk.exe#Grok Desk portable EXE" `
+            "src-tauri/target/release/bundle/msi/Grok Desk_0.1.0_x64_en-US.msi#Grok Desk MSI" `
+            "src-tauri/target/release/bundle/nsis/Grok Desk_0.1.0_x64-setup.exe#Grok Desk NSIS installer" `
+            "SHA256SUMS.txt#SHA-256 checksums"

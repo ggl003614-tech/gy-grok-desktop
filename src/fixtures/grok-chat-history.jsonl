@@ -1,0 +1,8 @@
+{"type":"system","content":"ignore"}
+{"type":"user","content":[{"type":"text","text":"<user_info>x</user_info>\n<user_query>\n请你阅读我的项目\n</user_query>"}]}
+{"type":"assistant","content":[{"type":"text","text":"<tool_call>{\"name\":\"read_file\"}</tool_call>"}]}
+{"type":"tool_result","content":[{"type":"text","text":"README.md"}]}
+{"type":"assistant","content":[{"type":"text","text":"读完了。这是 Go Young Studio，一个人在跑的中文 AI 内容工作室。"}]}
+{"type":"reasoning","content":"thinking about the project"}
+{"type":"user","content":[{"type":"text","text":"<user_query>人呢</user_query>"}]}
+{"type":"assistant","content":[{"type":"text","text":"在的。"}]}

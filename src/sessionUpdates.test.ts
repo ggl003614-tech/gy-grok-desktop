@@ -1,0 +1,255 @@
+import { describe, expect, it } from "vitest";
+import {
+  applyParsedUpdate,
+  extractLocalPreviewUrls,
+  friendlyToolName,
+  groupTimeline,
+  isSafePreviewUrl,
+  parseSessionUpdate,
+  redactForDisplay,
+  toolSummary,
+} from "./sessionUpdates";
+
+describe("ACP session updates", () => {
+  it("keeps a locally sent image message instead of appending the echo", () => {
+    const local: import("./sessionUpdates").TimelineItem = {
+      id: "local",
+      kind: "user",
+      text: "看看这张图",
+      source: "local",
+      images: [{ src: "data:image/png;base64,abc", alt: "shot.png" }],
+    };
+    const echoed = parseSessionUpdate({
+      sessionUpdate: "user_message_chunk",
+      content: { type: "text", text: "看看这张图" },
+    });
+    const timeline = applyParsedUpdate([local], echoed);
+    expect(timeline).toHaveLength(1);
+    expect(timeline[0].images?.[0]?.src).toContain("data:image/png");
+    expect(timeline[0].text).toBe("看看这张图");
+  });
+
+  it("extracts image parts from an assistant chunk", () => {
+    const parsed = parseSessionUpdate({
+      sessionUpdate: "agent_message_chunk",
+      content: { type: "image", mimeType: "image/png", data: "abc" },
+    });
+    expect(parsed.item?.images).toEqual([
+      { src: "data:image/png;base64,abc" },
+    ]);
+  });
+
+  it("renders the echoed user chunk once", () => {
+    const parsed = parseSessionUpdate({
+      sessionUpdate: "user_message_chunk",
+      content: { type: "text", text: "Run the tests" },
+    });
+    expect(parsed).toMatchObject({
+      kind: "chunk",
+      item: { kind: "user", text: "Run the tests" },
+    });
+  });
+
+  it("combines consecutive assistant chunks", () => {
+    const first = parseSessionUpdate({
+      sessionUpdate: "agent_message_chunk",
+      content: { type: "text", text: "Hello" },
+    });
+    const second = parseSessionUpdate({
+      sessionUpdate: "agent_message_chunk",
+      content: { type: "text", text: " world" },
+    });
+
+    const timeline = applyParsedUpdate(applyParsedUpdate([], first), second);
+    expect(timeline).toHaveLength(1);
+    expect(timeline[0]).toMatchObject({ kind: "assistant", text: "Hello world" });
+  });
+
+  it("puts image_gen / read-image tool output onto the timeline", () => {
+    const parsed = parseSessionUpdate({
+      sessionUpdate: "tool_call_update",
+      toolCallId: "img-1",
+      title: "image_gen",
+      status: "completed",
+      content: [
+        {
+          type: "content",
+          content: { type: "image", data: "/9j/4AAQSkZJRgABAQAAAQABAAD" },
+        },
+      ],
+    });
+    expect(parsed.item?.title).toBe("生图");
+    expect(parsed.item?.images?.[0]?.src).toBe(
+      "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD",
+    );
+
+    const historyStyle = parseSessionUpdate({
+      sessionUpdate: "tool_call_update",
+      toolCallId: "img-2",
+      title: "read_file",
+      status: "completed",
+      images: [{ type: "image", url: "data:image/png;base64,abc" }],
+    });
+    expect(historyStyle.item?.images?.[0]?.src).toBe("data:image/png;base64,abc");
+  });
+
+  it("keeps generated images when a later tool update only has text", () => {
+    const first = parseSessionUpdate({
+      sessionUpdate: "tool_call",
+      toolCallId: "img-3",
+      title: "image_gen",
+      status: "in_progress",
+    });
+    const second = parseSessionUpdate({
+      sessionUpdate: "tool_call_update",
+      toolCallId: "img-3",
+      title: "image_gen",
+      status: "completed",
+      content: [{ type: "content", content: { type: "image", data: "iVBORw0KGgo" } }],
+    });
+    const third = parseSessionUpdate({
+      sessionUpdate: "tool_call_update",
+      toolCallId: "img-3",
+      title: "image_gen",
+      status: "completed",
+      content: [{ type: "content", content: { type: "text", text: "images/1.jpg" } }],
+    });
+    const timeline = applyParsedUpdate(
+      applyParsedUpdate(applyParsedUpdate([], first), second),
+      third,
+    );
+    expect(timeline[0].images?.[0]?.src).toContain("data:image/png;base64,iVBORw0KGgo");
+  });
+
+  it("updates an existing tool call by id", () => {
+    const pending = parseSessionUpdate({
+      sessionUpdate: "tool_call",
+      toolCallId: "tool-1",
+      title: "Read file",
+      status: "pending",
+    });
+    const completed = parseSessionUpdate({
+      sessionUpdate: "tool_call_update",
+      toolCallId: "tool-1",
+      title: "Read file",
+      status: "completed",
+      content: [{ type: "content", content: { type: "text", text: "Done" } }],
+    });
+
+    const timeline = applyParsedUpdate(
+      applyParsedUpdate([], pending),
+      completed,
+    );
+    expect(timeline).toHaveLength(1);
+    expect(timeline[0]).toMatchObject({ status: "completed", text: "Done" });
+  });
+
+  it("extracts turn token usage", () => {
+    const parsed = parseSessionUpdate({
+      sessionUpdate: "turn_completed",
+      usage: { inputTokens: 42, outputTokens: 11, totalTokens: 53 },
+    });
+
+    expect(parsed).toMatchObject({
+      kind: "usage",
+      usage: { inputTokens: 42, outputTokens: 11, totalTokens: 53 },
+    });
+  });
+
+  it("handles ACP context usage updates", () => {
+    const parsed = parseSessionUpdate({
+      sessionUpdate: "usage_update",
+      used: 1200,
+      size: 500000,
+      cost: { amount: 0.02, currency: "USD" },
+    });
+    expect(parsed).toMatchObject({
+      kind: "usage",
+      usage: {
+        contextUsed: 1200,
+        contextSize: 500000,
+        costAmount: 0.02,
+        costCurrency: "USD",
+      },
+    });
+    expect(parsed.usage?.totalTokens).toBeUndefined();
+  });
+
+  it("summarizes tools as one line and never dumps raw JSON", () => {
+    const parsed = parseSessionUpdate({
+      sessionUpdate: "tool_call",
+      toolCallId: "tool-2",
+      title: "run_terminal_command",
+      status: "in_progress",
+      rawInput: { command: "npm run dev\n--host" },
+    });
+    expect(parsed.item).toMatchObject({
+      title: "命令",
+      text: "npm run dev",
+    });
+    expect(parsed.item?.text.includes("{")).toBe(false);
+    expect(toolSummary({ rawInput: { path: "E:\\\\web\\\\index.html" } })).toBe(
+      "web/index.html",
+    );
+    expect(friendlyToolName("read_file")).toBe("读取");
+  });
+
+  it("hides unknown verbose protocol events", () => {
+    expect(
+      parseSessionUpdate({
+        sessionUpdate: "some_experimental_blob",
+        huge: { nested: true },
+      }),
+    ).toEqual({ kind: "ignore" });
+  });
+
+  it("groups consecutive tool cards", () => {
+    const rows = groupTimeline([
+      { id: "u", kind: "user", text: "做网站" },
+      { id: "t1", kind: "tool", title: "读取", text: "a.ts", toolCallId: "1" },
+      { id: "t2", kind: "tool", title: "编辑", text: "a.ts", toolCallId: "2" },
+      { id: "a", kind: "assistant", text: "好了" },
+    ]);
+    expect(rows).toHaveLength(3);
+    expect(rows[1]).toMatchObject({ type: "tools" });
+    if (rows[1].type === "tools") expect(rows[1].items).toHaveLength(2);
+  });
+
+  it("extracts only local preview URLs", () => {
+    expect(
+      extractLocalPreviewUrls("打开 http://localhost:5173/ 和 https://example.com"),
+    ).toEqual(["http://localhost:5173/"]);
+    expect(isSafePreviewUrl("http://localhost:3000")).toBe(true);
+    expect(isSafePreviewUrl("http://localhost.evil.com")).toBe(false);
+  });
+
+  it("redacts secrets before tool details are rendered", () => {
+    expect(
+      redactForDisplay({
+        authorization: "Bearer abc123",
+        nested: { apiKey: "secret", url: "https://x.test?a=1&token=abc" },
+      }),
+    ).toEqual({
+      authorization: "[已隐藏]",
+      nested: { apiKey: "[已隐藏]", url: "https://x.test?a=1&token=[已隐藏]" },
+    });
+  });
+
+  it("processes a 10k-event streaming burst within the desktop budget", () => {
+    const started = performance.now();
+    let timeline: ReturnType<typeof applyParsedUpdate> = [];
+    for (let index = 0; index < 10_000; index += 1) {
+      timeline = applyParsedUpdate(
+        timeline,
+        parseSessionUpdate({
+          sessionUpdate: "agent_message_chunk",
+          content: { type: "text", text: "x" },
+        }),
+      );
+    }
+    const elapsed = performance.now() - started;
+    expect(timeline).toHaveLength(1);
+    expect(timeline[0].text).toHaveLength(10_000);
+    expect(elapsed).toBeLessThan(2_000);
+  });
+});

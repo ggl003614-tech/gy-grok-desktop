@@ -1,0 +1,32 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Frontend quality gates
+        run: |
+          npm run lint
+          npm test
+          npm run build
+      - name: Rust quality gates
+        shell: pwsh
+        run: |
+          rustup default stable
+          Push-Location src-tauri
+          cargo fmt -- --check
+          cargo test
+          cargo clippy --all-targets -- -D warnings
+          Pop-Location

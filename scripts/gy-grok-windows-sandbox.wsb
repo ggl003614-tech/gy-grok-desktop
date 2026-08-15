@@ -1,0 +1,26 @@
+<!--
+  Windows Sandbox 里试一遍发布包。整台干净虚拟机，比脚本那套彻底。
+
+  用之前：
+    1. 先跑 node scripts\pack-release.mjs 出 zip
+    2. Windows Sandbox 功能要开着（管理员 PowerShell 里跑一次，之后重启）：
+       Enable-WindowsOptionalFeature -Online -FeatureName Containers-DisposableClientVM -All
+
+  映射的是 dist-release（干净的 zip），不是 app\ ——
+  app\ 里有 WebView2 浏览器档案，映进去等于把登录态带进沙箱。
+
+  沙箱里桌面上会有 dist-release，双击 zip 解压，再双击「启动 Grok Desk.cmd」。
+  沙箱是全新系统，没有 grok、没有你的 .grok，正好是朋友那台机器的样子。
+-->
+<Configuration>
+  <MappedFolders>
+    <MappedFolder>
+      <HostFolder>E:\projects\grok-desktop\dist-release</HostFolder>
+      <ReadOnly>true</ReadOnly>
+    </MappedFolder>
+  </MappedFolders>
+  <Networking>Enable</Networking>
+  <LogonCommand>
+    <Command>cmd.exe /c explorer.exe "%USERPROFILE%\Desktop\dist-release"</Command>
+  </LogonCommand>
+</Configuration>

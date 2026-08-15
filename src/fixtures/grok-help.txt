@@ -1,0 +1,27 @@
+Grok Build TUI
+
+Usage: grok [OPTIONS] [PROMPT] [COMMAND]
+
+Commands:
+  agent        Run Grok without the interactive UI
+  completions  Generate shell completion scripts (bash, zsh, fish, powershell, ...)
+  dashboard    Open the Agent Dashboard view at startup
+  doctor       Check terminal, clipboard, color, and input support without starting Grok
+  du           Show what the grok home (~/.grok) uses on disk [aliases: disk-usage]
+  export       Export a session transcript as Markdown
+  help         Print this message or the help of the given subcommand(s)
+  inspect      Show the configuration Grok discovers for this directory
+  leader       Manage running leader processes
+  login        Sign in to Grok
+  logout       Sign out and clear cached credentials
+  mcp          Manage MCP server configurations
+  memory       Manage cross-session memory
+  models       List available models and exit
+  plugin       Manage plugins and marketplace sources
+  sessions     List, search, or restore sessions
+  setup        Fetch and install managed configuration
+  trace        Export or upload session trace data
+  update       Check for updates or install a specific version
+  version      Print version information [aliases: v]
+  worktree     Manage git worktrees
+  wrap         Run any command with local clipboard support (OSC 52 to system clipboard)

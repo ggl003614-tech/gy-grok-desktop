@@ -1,0 +1,27 @@
+name: Bug report
+description: Report a reproducible Grok Desk problem without sharing secrets.
+title: "[Bug]: "
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: Do not paste credentials, private prompts, project source, or unredacted logs.
+  - type: input
+    id: version
+    attributes:
+      label: Grok Desk and Grok Build versions
+      placeholder: Grok Desk 0.1.0; grok 1.0.x
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Reproduction steps
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected and actual behavior
+    validations:
+      required: true

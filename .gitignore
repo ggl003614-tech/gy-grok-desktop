@@ -1,0 +1,69 @@
+# ── 绝对不能提交 ─────────────────────────────────────────
+# app/ 是本机跑的工作副本。跑过之后旁边会长出 grok-desk.exe.WebView2/，
+# 那是 WebView2 的浏览器档案（Login Data、Cookies、History、Web Data）。
+# 提交进去等于把开发者的登录态推到公开仓库。
+app/
+*.WebView2/
+**/Login Data*
+**/Cookies*
+
+# 发布产物和沙箱现场
+dist-release/
+.sandbox-new-user/
+.sandbox-release/
+
+# 换图标时的原文件备份
+.icon-backup-*/
+
+# 开发过程中随手粘在根目录的桌面截图。
+# 这些图里有私聊内容、浏览器标签和本地路径，不是项目素材。
+/2019041255703889.jpg
+/534ec1fa-744e-4c0d-ab53-5740b0a9f088.png
+/e93dee32-2a88-4743-a481-1c04477fb13a.png
+/f1142929-7c16-4f47-bacf-ed21b9e7b043.png
+
+# 本机的开发交接笔记
+.remember/
+
+# 内部备忘，写的是开发机上的路径
+/怎么打开.txt
+
+# 凭据
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+
+# ── 构建产物 ─────────────────────────────────────────────
+node_modules
+dist
+dist-ssr
+src-tauri/target/
+src-tauri/gen/
+*.local
+
+# ── 测试与工具 ───────────────────────────────────────────
+coverage
+playwright-report
+test-results
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# ── 编辑器与系统 ─────────────────────────────────────────
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+Thumbs.db
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
