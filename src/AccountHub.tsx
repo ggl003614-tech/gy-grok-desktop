@@ -88,6 +88,7 @@ export function LoginDialog({
   succeeded,
   device,
   error,
+  logs,
   onCancel,
   onOpenUrl,
   onClose,
@@ -96,6 +97,9 @@ export function LoginDialog({
   succeeded: boolean;
   device?: DeviceAuth;
   error?: string;
+  /** grok login 的原始输出。出错时摊开给用户看，不然错误信息里那句
+   *  「请检查上方输出」指向的东西根本不存在。 */
+  logs?: string[];
   onCancel: () => void;
   onOpenUrl: (url: string) => void;
   onClose: () => void;
@@ -134,6 +138,12 @@ export function LoginDialog({
           </div>
         )}
         {error && <p className="auth-error">{error}</p>}
+        {error && logs && logs.length > 0 && (
+          <details className="auth-log">
+            <summary>{t("login.showOutput")}</summary>
+            <pre>{logs.join("\n")}</pre>
+          </details>
+        )}
         <div className="auth-actions">
           {running && !succeeded && (
             <button className="secondary-action" onClick={onCancel}>{t("common.cancel")}</button>

@@ -469,15 +469,26 @@ pub async fn start_grok_login(
     tauri::async_runtime::spawn(async move {
         let result = child.wait().await;
         LOGIN_PID.store(0, Ordering::SeqCst);
+        // 非零退出时也要给出可读原因。只塞 exitCode 的话，界面拿不到 error
+        // 字段就只能显示自己那句「请检查上方输出」，而那句话指向的输出并不存在。
         let payload = match result {
-            Ok(status) => serde_json::json!({
-              "success": status.success(),
+            Ok(status) if status.success() => serde_json::json!({
+              "success": true,
               "exitCode": status.code()
+            })
+            .to_string(),
+            Ok(status) => serde_json::json!({
+              "success": false,
+              "exitCode": status.code(),
+              "error": match status.code() {
+                  Some(code) => format!("grok login 退出，代码 {code}"),
+                  None => "grok login 被信号终止".to_string(),
+              }
             })
             .to_string(),
             Err(error) => serde_json::json!({
               "success": false,
-              "error": error.to_string()
+              "error": format!("等待 grok login 失败：{error}")
             })
             .to_string(),
         };

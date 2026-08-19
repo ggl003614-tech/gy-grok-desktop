@@ -253,3 +253,47 @@ describe("ACP session updates", () => {
     expect(elapsed).toBeLessThan(2_000);
   });
 });
+
+describe("交替流式块的合并", () => {
+  const chunk = (kind: "assistant" | "thought", text: string) => ({
+    kind: "chunk" as const,
+    item: { id: crypto.randomUUID(), kind, text },
+  });
+
+  it("正文被推理打断后仍并回同一条", () => {
+    let items: TimelineItem[] = [];
+    // Grok 实际的顺序：正文 → 推理 → 正文 → 推理 → 正文
+    items = applyParsedUpdate(items, chunk("assistant", "索引："));
+    items = applyParsedUpdate(items, chunk("thought", "在找文件"));
+    items = applyParsedUpdate(items, chunk("assistant", "F:\Personal"));
+    items = applyParsedUpdate(items, chunk("thought", "拼路径"));
+    items = applyParsedUpdate(items, chunk("assistant", "\docs\memory"));
+
+    const assistant = items.filter((i) => i.kind === "assistant");
+    const thought = items.filter((i) => i.kind === "thought");
+    expect(assistant).toHaveLength(1);
+    expect(thought).toHaveLength(1);
+    expect(assistant[0].text).toBe("索引：F:\Personal\docs\memory");
+    expect(thought[0].text).toBe("在找文件拼路径");
+  });
+
+  it("用户消息之后另起一条，不并到上一轮", () => {
+    let items: TimelineItem[] = [];
+    items = applyParsedUpdate(items, chunk("assistant", "第一轮"));
+    items = [...items, { id: "u1", kind: "user", text: "再来" }];
+    items = applyParsedUpdate(items, chunk("assistant", "第二轮"));
+
+    const assistant = items.filter((i) => i.kind === "assistant");
+    expect(assistant).toHaveLength(2);
+    expect(assistant[1].text).toBe("第二轮");
+  });
+
+  it("工具调用会切断合并", () => {
+    let items: TimelineItem[] = [];
+    items = applyParsedUpdate(items, chunk("assistant", "先读文件"));
+    items = [...items, { id: "t1", kind: "tool", text: "read", status: "completed" }];
+    items = applyParsedUpdate(items, chunk("assistant", "读完了"));
+
+    expect(items.filter((i) => i.kind === "assistant")).toHaveLength(2);
+  });
+});

@@ -25,6 +25,7 @@ import {
   History,
   LoaderCircle,
   LogIn,
+  Minimize2,
   Minus,
   MousePointer2,
   ScanSearch,
@@ -65,6 +66,11 @@ import {
   type TimelineItem,
   type UsageInfo,
 } from "./sessionUpdates";
+import {
+  reduceBackgroundTasks,
+  runningSummary,
+  type BackgroundTask,
+} from "./backgroundTasks";
 import {
   lookupForConnect,
   projectPathKey,
@@ -392,6 +398,8 @@ function App() {
   const [permission, setPermission] = useState<PermissionRequest>();
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
+  // CLI 一直在后台跑命令和子智能体，只是以前全混在对话里看不出来。
+  const [backgroundTasks, setBackgroundTasks] = useState<BackgroundTask[]>([]);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [sidebarWidth, setSidebarWidth] = useState(() => {
     const stored = Number(localStorage.getItem("grok-desk-sidebar-width"));
@@ -419,6 +427,7 @@ function App() {
   const [goMode, setGoMode] = useState(() => localStorage.getItem("grok-desk-go-mode") === "1");
   const [debugLines, setDebugLines] = useState<string[]>([]);
   const [computerControl, setComputerControl] = useState(true);
+  const [computerBusy, setComputerBusy] = useState(false);
   const [logs, setLogs] = useState<string[]>([]);
   const conversationListRef = useRef<HTMLDivElement>(null);
   const [loginOpen, setLoginOpen] = useState(false);
@@ -670,6 +679,9 @@ function App() {
         }
         return;
       }
+      // 后台任务跟时间线是两个视角看同一条 update：这里登记「还有什么在跑」，
+      // 下面照常把它渲染进对话。认不出来时 reducer 会原样返回，React 自己会跳过。
+      setBackgroundTasks((current) => reduceBackgroundTasks(current, update, Date.now()));
       const parsed = parseSessionUpdate(update);
       if (parsed.kind === "usage") {
         setUsage((current) => ({ ...current, ...parsed.usage }));
@@ -826,8 +838,10 @@ function App() {
           setLoginLogs((current) => [
             ...current,
             result.success
-              ? "登录完成，正在检测订阅…"
-              : `登录未完成：${result.error ?? "请检查上方输出"}`,
+              ? t("login.done")
+              : t("login.failed", {
+                  reason: result.error ?? t("login.failedFallback"),
+                }),
           ]);
           if (result.success) {
             setLoginOpen(false);
@@ -862,7 +876,8 @@ function App() {
       disposed = true;
       unlisten?.();
     };
-  }, [refreshCredits]);
+    // t 是模块级函数，引用稳定，进依赖不会让监听器反复重挂。
+  }, [refreshCredits, t]);
 
   useEffect(() => {
     localSessionIdRef.current = localSessionId;
@@ -1063,6 +1078,33 @@ function App() {
   useEffect(() => {
     void recoverDeskWindow(getCurrentWindow()).catch(() => undefined);
   }, []);
+
+  // 拦住所有 http(s) 链接。WebView 里点一个原生 <a> 会把整个 app 导航到那个网页 ——
+  // 界面连同标题栏一起消失，用户只能杀进程。助手回复里随手一个 localhost 链接
+  // 就能触发，所以这里统一接管：本机地址进预览栏，其余交给系统浏览器。
+  useEffect(() => {
+    const onClick = (event: MouseEvent) => {
+      if (event.defaultPrevented || event.button !== 0) return;
+      const target = event.target as HTMLElement | null;
+      const anchor = target?.closest?.("a");
+      if (!anchor) return;
+      const href = anchor.getAttribute("href")?.trim() ?? "";
+      if (!/^https?:\/\//i.test(href)) return; // 锚点、blob:、asset: 图片照常
+      event.preventDefault();
+      if (isSafePreviewUrl(href)) {
+        setPreviewUrl(href);
+        setPreviewDraft(href);
+        setSidebarTab("preview");
+        setActivityOpen(true);
+        return;
+      }
+      void invoke("open_external_url", { url: href }).catch((error) =>
+        addError(String(error)),
+      );
+    };
+    document.addEventListener("click", onClick);
+    return () => document.removeEventListener("click", onClick);
+  }, [addError]);
 
   useEffect(() => {
     const media = window.matchMedia("(prefers-color-scheme: light)");
@@ -2142,19 +2184,83 @@ function App() {
   const timelineRows = useMemo(() => groupTimeline(items), [items]);
   const showConversationList = shouldShowConversationList(items);
 
+  // 只有人本来就贴在底部时才跟着新内容走。滚上去看历史的时候把人拽回底部，
+  // 是流式输出里最烦的一件事 —— 边写边看根本没法回头。
+  const [stickToBottom, setStickToBottom] = useState(true);
+  const NEAR_BOTTOM = 80;
+
+  const onConversationScroll = useCallback(() => {
+    const node = conversationListRef.current;
+    if (!node) return;
+    const distance = node.scrollHeight - node.scrollTop - node.clientHeight;
+    setStickToBottom(distance <= NEAR_BOTTOM);
+  }, []);
+
+  // 输入栏那个「控制电脑」以前只是个只读标签，关掉之后连开回来的入口都没有。
+  // 现在点它就能开关，走的是设置页同一条路：先落到后端，再重连当前线程。
+  const toggleComputerControl = useCallback(async () => {
+    const next = !computerControl;
+    setComputerBusy(true);
+    try {
+      await invoke("set_computer_control", { enabled: next });
+      setComputerControl(next);
+      await invoke("set_setting", { key: "desktop.control", value: String(next) }).catch(
+        () => undefined,
+      );
+      if (connection === "connected" && project) {
+        await connectProject(project, {
+          force: true,
+          resumeSessionId: connectionInfo?.sessionId,
+        });
+      }
+    } catch (error) {
+      addError(String(error));
+    } finally {
+      setComputerBusy(false);
+    }
+  }, [computerControl, connection, project, connectionInfo?.sessionId, connectProject, addError]);
+
+  const jumpToLatest = useCallback(() => {
+    const node = conversationListRef.current;
+    if (!node) return;
+    node.scrollTo({ top: node.scrollHeight, behavior: "smooth" });
+    setStickToBottom(true);
+  }, []);
+
   useEffect(() => {
     const node = conversationListRef.current;
-    if (!node || !showConversationList) return;
+    if (!node || !showConversationList || !stickToBottom) return;
     node.scrollTop = node.scrollHeight;
-  }, [timelineRows, busy, showConversationList]);
-  const previewSuggestions = useMemo(() => {
-    const found: string[] = [];
-    for (const item of items) {
-      found.push(...extractLocalPreviewUrls(`${item.title ?? ""} ${item.text}`));
-    }
-    return [...new Set(found)];
-  }, [items]);
+  }, [timelineRows, busy, showConversationList, stickToBottom]);
+
+  // 换线程时回到贴底，否则上一个线程滚到一半的状态会带过来。
+  // 后台任务也一起清掉 —— 它们是挂在会话上的，跟着旧线程走。
+  useEffect(() => {
+    setStickToBottom(true);
+    setBackgroundTasks([]);
+  }, [localSessionId]);
   const connected = connection === "connected";
+
+  // 「1 个命令 · 2 个子智能体」。没有在跑的就是空串，整个提示不渲染。
+  const tasksRunning = runningSummary(backgroundTasks, (kind, count) =>
+    t(kind === "command" ? "tasks.commandCount" : "tasks.subagentCount", { n: count }),
+  );
+
+  // 官方 CLI 自带 /compact，能把已经聊过的内容压成摘要腾出上下文。
+  // 但它只在斜杠菜单里，要你自己记得。这里把它做成：平时不出现，
+  // 上下文过半才冒出来，点一下直接发，不用记命令。
+  const contextPercent = usage.contextSize
+    ? contextUsagePercent(usage.contextUsed ?? usage.totalTokens, usage.contextSize)
+    : null;
+  const contextTight = (contextPercent ?? 0) >= 60;
+
+  // 不套 useCallback：sendPrompt 本身每次渲染都是新的，包了也稳不住，
+  // 而这个只用在点击回调里，稳不稳定无所谓。
+  const compactContext = (note?: string) => {
+    if (!connected || busy || draftConversation) return;
+    void sendPrompt(note?.trim() ? `/compact ${note.trim()}` : "/compact");
+  };
+
   const emptyKind = conversationEmptyKind({
     restoring: threadRestoring,
     connecting: connection === "connecting",
@@ -2186,6 +2292,8 @@ function App() {
     { id: "extensions", label: t("palette.extensions"), detail: t("palette.extensionsDetail"), action: () => setWorkspacePage("extensions") },
     { id: "focus", label: t("palette.focus"), detail: t("palette.focusDetail"), shortcut: "Ctrl L", disabled: !connected, action: () => { setWorkspacePage("chat"); window.setTimeout(() => composerRef.current?.focus(), 0); } },
     { id: "preview", label: t("palette.preview"), detail: t("palette.previewDetail"), shortcut: "Ctrl P", action: () => { setActivityOpen(true); setSidebarTab("preview"); } },
+    { id: "compact", label: t("palette.compact"), detail: t("palette.compactDetail"), disabled: !connected || busy, action: () => compactContext() },
+    { id: "context", label: t("palette.context"), detail: t("palette.contextDetail"), disabled: !connected || busy, action: () => { void sendPrompt("/context"); } },
     { id: "account", label: t("palette.account"), detail: connectionInfo || account?.authenticated ? friendlyTier(connectionInfo?.subscriptionTier ?? account?.subscriptionTier) : t("palette.loginGrok"), action: () => void openAccountOrLogin() },
     ...availableCommands.map((command) => ({
       id: `grok-command-${command.name}`,
@@ -2631,7 +2739,7 @@ function App() {
                   )}
                 </div>
               ) : (
-                <div className="message-scroll-list" ref={conversationListRef} role="log" aria-live="polite">
+                <div className="message-scroll-list" ref={conversationListRef} onScroll={onConversationScroll} role="log" aria-live="polite">
                   <div className="virtual-message-header" />
                   {timelineRows.map((row) => (
                     <div className="virtual-message-row" key={row.id}>
@@ -2647,6 +2755,12 @@ function App() {
                       <div className="thinking-row"><LoaderCircle className="spin" size={15} /><span>{t("chat.thinking")}</span></div>
                     )}
                   </div>
+                  {!stickToBottom && (
+                    <button className="jump-latest" onClick={jumpToLatest} title={t("chat.jumpLatest")}>
+                      <ChevronDown size={14} />
+                      <span>{t("chat.jumpLatest")}</span>
+                    </button>
+                  )}
                 </div>
               )}
               {goMode && (
@@ -2765,11 +2879,17 @@ function App() {
                         ))}
                       </select>
                     </label>
-                    {computerControl ? (
-                      <span className="computer-chip" title={t("settings.computerAllow")}>
-                        <MousePointer2 size={13} />{t("composer.computer")}
-                      </span>
-                    ) : null}
+                    <button
+                      type="button"
+                      className={`computer-chip${computerControl ? " on" : ""}`}
+                      disabled={computerBusy}
+                      aria-pressed={computerControl}
+                      title={computerControl ? t("composer.computerOff") : t("composer.computerOn")}
+                      onClick={() => void toggleComputerControl()}
+                    >
+                      <MousePointer2 size={13} />
+                      {t("composer.computer")}
+                    </button>
                     {connected && !draftConversation ? (
                       <span
                         className="token-chip"
@@ -2780,7 +2900,35 @@ function App() {
                         })}
                       >
                         {formatTokens(spend.total)} {t("composer.tokens")}
+                        {contextPercent != null ? (
+                          <em className={contextTight ? "tight" : ""}>
+                            {t("composer.contextPct", { n: contextPercent })}
+                          </em>
+                        ) : null}
                       </span>
+                    ) : null}
+                    {tasksRunning ? (
+                      <button
+                        type="button"
+                        className="tasks-chip"
+                        title={t("tasks.openPanel")}
+                        onClick={() => { setActivityOpen(true); setSidebarTab("activity"); }}
+                      >
+                        <LoaderCircle size={13} className="spin" />
+                        {tasksRunning}
+                      </button>
+                    ) : null}
+                    {connected && !draftConversation && contextTight ? (
+                      <button
+                        type="button"
+                        className="compact-chip"
+                        disabled={busy}
+                        title={t("composer.compactTitle", { n: contextPercent ?? 0 })}
+                        onClick={() => compactContext()}
+                      >
+                        <Minimize2 size={13} />
+                        {t("composer.compact")}
+                      </button>
                     ) : null}
                     {activeModel?.supportsReasoningEffort &&
                     activeModel.reasoningEfforts.length > 0 ? (
@@ -2826,7 +2974,6 @@ function App() {
               url={previewUrl}
               draft={previewDraft}
               nonce={previewEpoch}
-              suggestions={previewSuggestions}
               onDraft={setPreviewDraft}
               onOpen={(value) => {
                 if (!isSafePreviewUrl(value)) {
@@ -2839,6 +2986,9 @@ function App() {
               onExternal={(value) => {
                 void invoke("open_preview_url", { url: value }).catch((error) => addError(String(error)));
               }}
+              // 退出预览回到活动页，而不是把整个活动面板关掉 —— 面板顶上那个 X
+              // 关的是面板，正盯着预览内容的人不会把它当成「退出预览」。
+              onExit={() => setSidebarTab("activity")}
             />
           ) : (
             <>
@@ -2848,6 +2998,35 @@ function App() {
                 <div><span>{t("activity.context")}</span><strong>{usage.contextSize ? `${contextUsagePercent(usage.contextUsed ?? usage.totalTokens, usage.contextSize) ?? 0}%` : "—"}</strong></div>
                 <div><span>{t("activity.status")}</span><strong className={busy ? "working" : "idle"}>{busy ? t("status.working") : t("status.idle")}</strong></div>
               </section>
+              {backgroundTasks.length > 0 && (
+                <section className="activity-list task-list">
+                  <label>{t("tasks.title")}</label>
+                  {backgroundTasks.map((task) => (
+                    <div className={`activity-item task-${task.status}`} key={task.id}>
+                      <div className="tool-dot">
+                        {task.kind === "subagent" ? <Bot size={13} /> : <TerminalSquare size={13} />}
+                      </div>
+                      <div>
+                        <strong title={task.title}>{task.title || task.id.slice(0, 8)}</strong>
+                        <span>
+                          {task.kind === "subagent" && task.subagentType ? `${task.subagentType} · ` : ""}
+                          {task.status === "running"
+                            ? task.progress || t("tasks.running")
+                            : task.status === "failed"
+                              ? t("tasks.failed", { code: task.exitCode ?? "?" })
+                              : t("tasks.done")}
+                          {task.durationSecs ? ` · ${Math.round(task.durationSecs)}s` : ""}
+                        </span>
+                      </div>
+                      {task.status === "running"
+                        ? <LoaderCircle size={13} className="spin" />
+                        : task.status === "failed"
+                          ? <ShieldAlert size={14} className="danger" />
+                          : <Check size={14} className="success" />}
+                    </div>
+                  ))}
+                </section>
+              )}
               <section className="activity-list">
                 <label>{t("activity.tools")}</label>
                 {toolItems.length ? toolItems.map((item) => (
@@ -2972,6 +3151,9 @@ function App() {
           succeeded={loginSucceeded}
           device={deviceAuth}
           error={!loginRunning && !loginSucceeded ? loginLogs.at(-1) : undefined}
+          // 失败时把 CLI 的原始输出一并交给弹窗。只给最后一行的话，
+          // 用户看到的永远是自己那句「请检查上方输出」，而那个输出并不存在。
+          logs={loginLogs}
           onCancel={() => void cancelLogin()}
           onOpenUrl={(url) =>
             void invoke("open_external_url", { url }).catch((error) =>

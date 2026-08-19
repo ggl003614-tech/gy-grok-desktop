@@ -476,6 +476,19 @@ export function isSafePreviewUrl(url: string): boolean {
   );
 }
 
+/** 流式过程中会交替出现的两种块。往回找合并目标时可以跨过对方，
+ *  但不能跨过用户消息、工具调用这些有结构意义的项。 */
+const STREAMING_KINDS = new Set(["assistant", "thought"]);
+
+function lastStreamingIndex(items: TimelineItem[], kind: string) {
+  for (let i = items.length - 1; i >= 0; i--) {
+    const candidate = items[i];
+    if (candidate.kind === kind) return i;
+    if (!STREAMING_KINDS.has(candidate.kind)) return -1;
+  }
+  return -1;
+}
+
 export function applyParsedUpdate(
   items: TimelineItem[],
   parsed: ParsedUpdate,
@@ -491,12 +504,19 @@ export function applyParsedUpdate(
         images: last.images?.length ? last.images : item.images,
       }];
     }
-    if (last?.kind === item.kind) {
-      return [...items.slice(0, -1), {
-        ...last,
-        text: last.text + item.text,
-        images: [...(last.images ?? []), ...(item.images ?? [])],
-      }];
+    // Grok 是「正文→推理→正文→推理」交替流出来的。只看最后一条的话，
+    // 每交替一次正文就断成新的一条，一段回答会碎成十几个气泡。
+    // 所以往回找同类时跳过另一种流式项，正文归正文、推理归推理。
+    const index = lastStreamingIndex(items, item.kind);
+    if (index >= 0) {
+      const previous = items[index];
+      const next = [...items];
+      next[index] = {
+        ...previous,
+        text: previous.text + item.text,
+        images: [...(previous.images ?? []), ...(item.images ?? [])],
+      };
+      return next;
     }
     return [...items, item];
   }

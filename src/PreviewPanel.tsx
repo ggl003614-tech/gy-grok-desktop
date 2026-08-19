@@ -1,91 +1,90 @@
-import { useMemo, useState } from "react";
-import { ExternalLink, RefreshCw } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { ExternalLink, RefreshCw, X } from "lucide-react";
 import { isSafePreviewUrl } from "./sessionUpdates";
-
-const PRESETS = [
-  "http://localhost:5173",
-  "http://localhost:3000",
-  "http://localhost:4173",
-  "http://localhost:8080",
-];
+import { useT } from "./i18n";
 
 export function PreviewPanel({
   url,
   draft,
   nonce,
-  suggestions,
   onDraft,
   onOpen,
   onRefresh,
   onExternal,
+  onExit,
 }: {
   url: string;
   draft: string;
   nonce: number;
-  suggestions: string[];
   onDraft: (value: string) => void;
   onOpen: (value: string) => void;
   onRefresh: () => void;
   onExternal: (value: string) => void;
+  onExit: () => void;
 }) {
+  const t = useT();
   const [frameError, setFrameError] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
   const valid = isSafePreviewUrl(url);
-  const options = useMemo(
-    () => [...new Set([...suggestions, ...PRESETS])],
-    [suggestions],
-  );
+
+  // Esc 退出预览。iframe 抢焦点时事件到不了这里，所以按钮才是主出口。
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onExit();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onExit]);
 
   return (
     <div className="preview-panel">
-      <form
-        className="preview-bar"
-        onSubmit={(event) => {
-          event.preventDefault();
-          onOpen(draft.trim());
-          setFrameError(false);
-        }}
-      >
-        <input
-          value={draft}
-          onChange={(event) => onDraft(event.target.value)}
-          placeholder="http://localhost:5173"
-          aria-label="预览地址"
-          spellCheck={false}
-        />
-        <button type="submit">打开</button>
-        <button type="button" onClick={onRefresh} title="刷新" aria-label="刷新预览">
+      <div className="preview-bar">
+        <form
+          className="preview-url"
+          onSubmit={(event) => {
+            event.preventDefault();
+            onOpen(draft.trim());
+            setFrameError(false);
+            inputRef.current?.blur();
+          }}
+        >
+          <input
+            ref={inputRef}
+            value={draft}
+            onChange={(event) => onDraft(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Escape") {
+                event.stopPropagation();
+                onDraft(url);
+                inputRef.current?.blur();
+              }
+            }}
+            placeholder="http://localhost:5173"
+            aria-label={t("preview.address")}
+            spellCheck={false}
+          />
+        </form>
+        <button type="button" onClick={onRefresh} title={t("common.refresh")} aria-label={t("common.refresh")}>
           <RefreshCw size={14} />
         </button>
         <button
           type="button"
           disabled={!valid}
           onClick={() => onExternal(url)}
-          title="用浏览器打开"
-          aria-label="用浏览器打开"
+          title={t("preview.openBrowser")}
+          aria-label={t("preview.openBrowser")}
         >
           <ExternalLink size={14} />
         </button>
-      </form>
-      <div className="preview-presets">
-        {options.map((entry) => (
-          <button
-            key={entry}
-            className={entry === url ? "on" : ""}
-            onClick={() => {
-              onDraft(entry);
-              onOpen(entry);
-              setFrameError(false);
-            }}
-          >
-            {entry.replace(/^https?:\/\//, "")}
-          </button>
-        ))}
+        <button type="button" onClick={onExit} title={t("preview.exit")} aria-label={t("preview.exit")}>
+          <X size={14} />
+        </button>
       </div>
       {valid ? (
         <iframe
           key={`${url}#${nonce}`}
           className="preview-frame"
-          title="网站预览"
+          title={t("activity.preview")}
           src={url}
           sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
           onLoad={() => setFrameError(false)}
@@ -93,13 +92,11 @@ export function PreviewPanel({
         />
       ) : (
         <div className="preview-empty">
-          <p>网站跑起来后，把本地地址填在上面。</p>
-          <p>对话里出现 `localhost` 链接时，也会自动跳到这一栏。</p>
+          <p>{t("preview.emptyTitle")}</p>
+          <p>{t("preview.emptyHint")}</p>
         </div>
       )}
-      {valid && frameError && (
-        <p className="preview-hint">页面没加载到。确认开发服务器已启动，并且允许被嵌入。</p>
-      )}
+      {valid && frameError && <p className="preview-hint">{t("preview.loadFailed")}</p>}
     </div>
   );
 }

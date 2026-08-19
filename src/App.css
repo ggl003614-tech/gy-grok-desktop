@@ -862,15 +862,38 @@ button:disabled { cursor: default; opacity: .45; }
 .code-fold button { width: 100%; padding: 6px 10px; text-align: left; color: var(--muted); font-size: 12px; background: var(--inset); }
 .code-fold pre { margin: 0; border: 0; }
 .permission-summary { margin: 0 0 12px; color: var(--text-2); font-size: 13px; word-break: break-all; }
+/* 预览栏照 Claude 的做法：一条安静的地址条 + 内容占满剩下的全部。
+   原来那排端口标签会把整段对话里出现过的 localhost 全列出来，
+   二十几个挤三行，还混着解析错的字符串，纯噪音，去掉了。 */
 .preview-panel { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; }
-.preview-bar { display: grid; grid-template-columns: 1fr auto auto auto; gap: 4px; padding: 8px; }
-.preview-bar input { min-width: 0; padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel-2); color: var(--text); font-size: 12px; }
-.preview-bar button { padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px; color: var(--text-2); background: var(--panel-2); }
-.preview-bar button:hover { background: var(--hover); color: var(--text); }
-.preview-presets { display: flex; flex-wrap: wrap; gap: 4px; padding: 0 8px 8px; }
-.preview-presets button { padding: 3px 7px; border: 1px solid var(--line); border-radius: 999px; color: var(--muted); font-size: 11px; background: var(--panel-2); }
-.preview-presets button.on { color: var(--text); border-color: var(--text-2); background: var(--hover); }
-.preview-frame { flex: 1; min-width: 0; min-height: 240px; width: 100%; border: 0; border-top: 1px solid var(--line); background: #fff; }
+.preview-bar {
+  display: flex; align-items: center; gap: 2px;
+  padding: 6px 6px 6px 10px;
+  border-bottom: 1px solid var(--line-soft);
+}
+.preview-url { flex: 1; min-width: 0; display: flex; }
+.preview-url input {
+  width: 100%; min-width: 0;
+  padding: 5px 6px; border: 1px solid transparent; border-radius: 6px;
+  background: transparent; color: var(--muted);
+  font: 400 12px/1.4 DM Mono, ui-monospace, monospace;
+  text-overflow: ellipsis;
+}
+.preview-url input:hover { background: var(--hover); }
+.preview-url input:focus {
+  outline: none; color: var(--text);
+  border-color: var(--line); background: var(--panel-2);
+}
+.preview-bar button {
+  flex: 0 0 auto;
+  display: grid; place-items: center;
+  width: 26px; height: 26px; padding: 0;
+  border: 0; border-radius: 6px;
+  color: var(--muted); background: transparent;
+}
+.preview-bar button:hover:not(:disabled) { background: var(--hover); color: var(--text); }
+.preview-bar button:disabled { opacity: .35; }
+.preview-frame { flex: 1; min-width: 0; min-height: 240px; width: 100%; border: 0; background: #fff; }
 .preview-empty, .preview-hint { padding: 16px 12px; color: var(--muted); font-size: 12px; line-height: 1.6; }
 .activity-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-width: 0; padding: 10px 12px; border-bottom: 1px solid var(--line-soft); }
 .activity-head span, .activity-head small { display: block; }
@@ -1198,3 +1221,63 @@ button:disabled { cursor: default; opacity: .45; }
   .advanced-worktree { grid-template-columns: 1fr 1fr; }
   .advanced-worktree .advanced-check { grid-column: 1 / -1; }
 }
+
+/* 滚上去看历史时浮出来的「回到最新」。流式输出时不再硬把人拽回底部，
+   所以需要一个明确的回去入口。 */
+.message-scroll-list { position: relative; }
+.jump-latest {
+  position: sticky; bottom: 14px; left: 50%;
+  transform: translateX(-50%);
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 6px 12px 6px 9px;
+  border: 1px solid var(--line); border-radius: 999px;
+  background: var(--panel-2); color: var(--text-2);
+  font-size: 12px;
+  box-shadow: 0 4px 14px rgba(0,0,0,.16);
+  z-index: 5;
+}
+.jump-latest:hover { color: var(--text); background: var(--hover); }
+
+/* 「控制电脑」从只读标签改成开关按钮：关掉时是灰的空心，开着时点亮。
+   以前关掉后整个消失，用户找不到开回来的地方。 */
+button.computer-chip { cursor: pointer; opacity: .5; }
+button.computer-chip.on { opacity: 1; }
+button.computer-chip:hover:not(:disabled) { opacity: 1; background: var(--hover); }
+button.computer-chip:disabled { cursor: default; opacity: .3; }
+
+/* 上下文占比跟在 token 数后面，过半时变暖色提醒。
+   「压缩上下文」平时不出现，超过 60% 才冒出来 —— 官方 /compact 一直都在，
+   只是藏在斜杠菜单里要你自己记得。 */
+.token-chip em { font-style: normal; opacity: .7; }
+.token-chip em.tight { color: var(--warn, #d97757); opacity: 1; }
+.compact-chip {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 4px 10px 4px 8px;
+  border: 1px solid var(--warn, #d97757); border-radius: 999px;
+  color: var(--warn, #d97757); background: transparent;
+  font-size: 12px; cursor: pointer;
+}
+.compact-chip:hover:not(:disabled) { background: rgba(217,119,87,.12); }
+.compact-chip:disabled { opacity: .4; cursor: default; }
+
+/* 「还有 N 个东西在跑」。做成安静的灰底，不跟 compact 那个橙色抢注意力 ——
+   它只是告诉你后台有活，不是要你立刻处理。 */
+.tasks-chip {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 4px 10px 4px 8px;
+  border: 1px solid var(--line); border-radius: 999px;
+  color: var(--muted); background: transparent;
+  font-size: 12px; cursor: pointer;
+}
+.tasks-chip:hover { color: var(--text); border-color: var(--text); }
+.tasks-chip .spin { flex: none; }
+
+/* 活动面板里的后台任务清单。跟工具列表共用 .activity-item 的排版，
+   只在状态上做区分：失败标红，跑完的整行压暗，正在跑的保持原色。 */
+.task-list .activity-item strong {
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.task-list .activity-item.task-completed { opacity: .55; }
+.task-list .activity-item.task-failed strong { color: var(--red); }
+.task-list .danger { color: var(--red); }
+
