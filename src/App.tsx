@@ -1560,6 +1560,55 @@ function App() {
     }
   };
 
+  /**
+   * 删除一条线程：远端会话、本地记录、后台快照一起清。
+   * 正在跑的先停掉再删；删的是眼前这条时，回到新对话的空状态。
+   */
+  const deleteThread = async (session: RemoteSession) => {
+    const sessionId = session.sessionId;
+    try {
+      if (threadSnapshotsRef.current[sessionId]?.busy) {
+        await client.cancel(sessionId);
+      }
+      if (connectionInfo?.capabilities.deleteSession) {
+        await client.deleteSession(sessionId);
+      } else {
+        await invoke("delete_grok_session", { sessionId });
+      }
+      // 本地记录按远端 id 找。找不到就算了 —— 远端已经删干净了。
+      if (workspaceId) {
+        const locals = await invoke<LocalSessionRecord[]>("list_local_sessions", { workspaceId })
+          .catch(() => [] as LocalSessionRecord[]);
+        for (const record of locals.filter((entry) => entry.remoteSessionId === sessionId)) {
+          await invoke("delete_local_session", { id: record.id }).catch(() => undefined);
+        }
+      }
+      setThreadSnapshots((current) => {
+        if (!current[sessionId]) return current;
+        const rest = { ...current };
+        delete rest[sessionId];
+        threadSnapshotsRef.current = rest;
+        return rest;
+      });
+      // 删的是当前打开的线程：不能停在一个已经不存在的会话上。
+      if (connectionInfo?.sessionId === sessionId) {
+        ++threadSwitchGen.current;
+        localSessionIdRef.current = "";
+        setLocalSessionId("");
+        setItems([]);
+        setUsage({});
+        setBackgroundTasks([]);
+        setBusy(false);
+        setPermission(undefined);
+        setDraftConversation(true);
+      }
+      setStatusMessage(t("sidebar.deleted"));
+      void refreshAllSessions();
+    } catch (error) {
+      addError(String(error));
+    }
+  };
+
   /** 停掉某个后台线程，不用先切过去。 */
   const cancelThread = async (sessionId: string) => {
     await client.cancel(sessionId);
@@ -2583,6 +2632,7 @@ function App() {
         onCollapse={() => setSidebarOpen(false)}
         threadState={(sessionId) => threadBadge(threadSnapshots[sessionId])}
         onStopThread={(sessionId) => void cancelThread(sessionId)}
+        onDeleteThread={(session) => void deleteThread(session)}
       >
         <div className="sidebar-resizer" onMouseDown={startSidebarResize} title={t("sidebar.resize")} />
         <div className="sidebar-account">

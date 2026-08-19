@@ -1311,3 +1311,25 @@ i.thread-badge.dot {
 }
 .task-stop:hover { color: var(--red); background: var(--danger-bg, rgba(220,80,60,.12)); }
 
+/* 线程行的删除。跟重命名一样只在 hover 时出现；确认态是行内小字 + 两个小按钮，
+   不弹全局对话框 —— 误触的成本要低。 */
+.tree-delete-btn {
+  display: none; flex: none;
+  padding: 3px; border-radius: 4px; color: var(--muted); background: transparent;
+}
+.tree-thread:hover .tree-delete-btn { display: inline-flex; }
+.tree-delete-btn:hover { color: var(--red); background: var(--danger-bg, rgba(220,80,60,.12)); }
+.tree-confirm {
+  display: inline-flex; align-items: center; gap: 6px;
+  flex: 1; min-width: 0; padding: 2px 4px;
+  font-size: 12px; color: var(--red);
+}
+.tree-confirm .confirm-yes,
+.tree-confirm .confirm-no {
+  display: inline-flex; padding: 3px; border-radius: 4px; background: transparent;
+}
+.tree-confirm .confirm-yes { color: var(--red); }
+.tree-confirm .confirm-yes:hover { background: var(--danger-bg, rgba(220,80,60,.12)); }
+.tree-confirm .confirm-no { color: var(--muted); }
+.tree-confirm .confirm-no:hover { color: var(--text); }
+

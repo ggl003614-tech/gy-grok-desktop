@@ -445,6 +445,11 @@ const zh: Dict = {
   "tasks.stop": "停掉这个任务",
   "tasks.stopTitle": "让 Grok 停掉这个任务。注意：这会打断当前正在进行的这一轮。",
   "tasks.stopping": "正在请求停止后台任务",
+  "sidebar.delete": "删除线程",
+  "sidebar.deleteConfirm": "删除？",
+  "sidebar.deleteYes": "确认删除",
+  "sidebar.deleteNo": "取消",
+  "sidebar.deleted": "线程已删除",
 };
 
 const en: Dict = {
@@ -888,6 +893,11 @@ const en: Dict = {
   "tasks.stop": "Stop this task",
   "tasks.stopTitle": "Ask Grok to kill this task. Note: this interrupts the turn currently in progress.",
   "tasks.stopping": "Asking Grok to stop a background task",
+  "sidebar.delete": "Delete thread",
+  "sidebar.deleteConfirm": "Delete?",
+  "sidebar.deleteYes": "Confirm delete",
+  "sidebar.deleteNo": "Cancel",
+  "sidebar.deleted": "Thread deleted",
 };
 
 const tables: Record<Locale, Dict> = { zh, en };

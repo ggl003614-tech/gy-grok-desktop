@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import {
   ChevronDown,
   ChevronRight,
@@ -10,6 +10,9 @@ import {
   Search,
   LoaderCircle,
   Square,
+  Trash2,
+  Check,
+  X,
 } from "lucide-react";
 import {
   OTHER_FOLDER_KEY,
@@ -39,6 +42,7 @@ export function Sidebar({
   onCollapse,
   threadState,
   onStopThread,
+  onDeleteThread,
 }: {
   project?: string;
   currentSessionId?: string;
@@ -57,10 +61,23 @@ export function Sidebar({
   /** 后台线程的状态：在跑，还是切走之后攒了新内容。 */
   threadState?: (sessionId: string) => "running" | "unseen" | "none";
   onStopThread?: (sessionId: string) => void;
+  onDeleteThread?: (session: RemoteSession) => void;
 }) {
   const t = useT();
   const visible = filterFolderTree(folders, query);
   const [editingId, setEditingId] = useState("");
+  // 行内确认，不弹全局对话框。误触垃圾桶时按 Esc 或点别处就能反悔。
+  const [confirmingId, setConfirmingId] = useState("");
+
+  // Esc 在哪儿按都能取消删除确认。
+  useEffect(() => {
+    if (!confirmingId) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setConfirmingId("");
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [confirmingId]);
   const [draftTitle, setDraftTitle] = useState("");
 
   return (
@@ -137,7 +154,30 @@ export function Sidebar({
                             key={session.sessionId}
                             className={`tree-thread ${session.sessionId === currentSessionId ? "active" : ""} badge-${badge}`}
                           >
-                            {editingId === session.sessionId ? (
+                            {confirmingId === session.sessionId ? (
+                              <span className="tree-confirm" onClick={(event) => event.stopPropagation()}>
+                                <span>{t("sidebar.deleteConfirm")}</span>
+                                <button
+                                  className="confirm-yes"
+                                  title={t("sidebar.deleteYes")}
+                                  aria-label={t("sidebar.deleteYes")}
+                                  onClick={() => {
+                                    setConfirmingId("");
+                                    onDeleteThread?.(session);
+                                  }}
+                                >
+                                  <Check size={12} />
+                                </button>
+                                <button
+                                  className="confirm-no"
+                                  title={t("sidebar.deleteNo")}
+                                  aria-label={t("sidebar.deleteNo")}
+                                  onClick={() => setConfirmingId("")}
+                                >
+                                  <X size={12} />
+                                </button>
+                              </span>
+                            ) : editingId === session.sessionId ? (
                               <input
                                 className="tree-rename"
                                 value={draftTitle}
@@ -201,6 +241,17 @@ export function Sidebar({
                                   }}
                                 >
                                   <Pencil size={12} />
+                                </button>
+                                <button
+                                  className="tree-delete-btn"
+                                  title={t("sidebar.delete")}
+                                  aria-label={`${t("sidebar.delete")} ${sessionTitle(session)}`}
+                                  onClick={(event) => {
+                                    event.stopPropagation();
+                                    setConfirmingId(session.sessionId);
+                                  }}
+                                >
+                                  <Trash2 size={12} />
                                 </button>
                               </>
                             )}
