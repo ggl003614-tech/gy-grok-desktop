@@ -439,6 +439,12 @@ const zh: Dict = {
   "tasks.commandCount": "{n} 个命令",
   "tasks.subagentCount": "{n} 个子智能体",
   "tasks.openPanel": "还有后台任务在跑，点开看看",
+  "sidebar.stopThread": "停掉这个线程",
+  "composer.threadsRunning": "另外 {n} 个线程在跑",
+  "composer.threadsRunningTitle": "别的线程还有活没干完，它们在后台继续跑，不用切过去等。",
+  "tasks.stop": "停掉这个任务",
+  "tasks.stopTitle": "让 Grok 停掉这个任务。注意：这会打断当前正在进行的这一轮。",
+  "tasks.stopping": "正在请求停止后台任务",
 };
 
 const en: Dict = {
@@ -876,6 +882,12 @@ const en: Dict = {
   "tasks.commandCount": "{n} command",
   "tasks.subagentCount": "{n} subagent",
   "tasks.openPanel": "Background work is still running — open the panel",
+  "sidebar.stopThread": "Stop this thread",
+  "composer.threadsRunning": "{n} other thread running",
+  "composer.threadsRunningTitle": "Other threads are still working in the background — no need to switch over and wait.",
+  "tasks.stop": "Stop this task",
+  "tasks.stopTitle": "Ask Grok to kill this task. Note: this interrupts the turn currently in progress.",
+  "tasks.stopping": "Asking Grok to stop a background task",
 };
 
 const tables: Record<Locale, Dict> = { zh, en };

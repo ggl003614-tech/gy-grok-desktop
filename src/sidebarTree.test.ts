@@ -5,6 +5,7 @@ import {
   folderDisplayName,
   groupSessionsByFolder,
   isJunkSession,
+  isSubagentSession,
   sessionTitle,
 } from "./sidebarTree";
 
@@ -99,5 +100,32 @@ describe("sidebar tree", () => {
     expect(hits[0].sessions.map((session) => session.sessionId)).toEqual(["b"]);
     expect(sessionTitle({ sessionId: "abcd1234" })).toBe("未命名对话");
     expect(folderDisplayName("D:\\GY工作室")).toBe("GY工作室");
+  });
+});
+
+describe("子智能体会话", () => {
+  it("不进线程列表 —— 它们是 Grok 自己起的，内容已经在父对话里了", () => {
+    expect(isSubagentSession({ sessionId: "a", kind: "subagent" })).toBe(true);
+    expect(isSubagentSession({ sessionId: "b" })).toBe(false);
+    expect(isSubagentSession({ sessionId: "c", kind: "normal" })).toBe(false);
+  });
+
+  it("哪怕有标题有消息，也照样藏掉", () => {
+    // 子智能体的 summary.json 会自动生成标题，看起来跟正常线程一模一样
+    expect(
+      isJunkSession({
+        sessionId: "sub",
+        kind: "subagent",
+        title: "Count recursive .rs files in workspace",
+        numChatMessages: 10,
+        hasUserQuery: true,
+      }),
+    ).toBe(true);
+  });
+
+  it("正常线程不受影响", () => {
+    expect(
+      isJunkSession({ sessionId: "real", title: "改预览面板", numChatMessages: 10, hasUserQuery: true }),
+    ).toBe(false);
   });
 });

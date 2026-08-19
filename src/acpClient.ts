@@ -106,6 +106,9 @@ export interface RemoteSession {
   updatedAt?: string;
   summary?: string;
   numChatMessages?: number;
+  /** 磁盘上的 session_kind。子智能体是 "subagent"。 */
+  kind?: string;
+  agentName?: string;
   contextTokensUsed?: number;
   contextWindowTokens?: number;
   contextWindowUsage?: number;
@@ -576,25 +579,53 @@ export class GrokAcpClient {
     };
   }
 
-  async prompt(input: string | PromptPart[]): Promise<JsonObject> {
-    if (!this.sessionId) throw new Error("Grok 会话尚未连接");
+  /** 当前正在展示的会话。并发时用它当默认值，真要指定得显式传。 */
+  get activeSessionId() {
+    return this.sessionId;
+  }
+
+  /**
+   * 把焦点换到另一个已经开着的会话，不发任何请求。
+   *
+   * 并发之后「切线程」有两种：没开过的要 session/load 重放历史；已经在本进程里
+   * 活着的（比如刚切走那个还在跑）只要换个指针。后者必须走这里，不能走 loadSession——
+   * 那会把正在跑的一轮打断。setSessionModel 这些方法用的还是 this.sessionId，
+   * 所以指针不同步的话，改模型会改到别的线程头上。
+   */
+  focusSession(sessionId: string) {
+    const next = sessionId.trim();
+    if (next) this.sessionId = next;
+  }
+
+  /**
+   * 往某个会话发一轮。不传 sessionId 就是当前会话（老行为）。
+   *
+   * 传了才是并发的关键：JSON-RPC 这层本来就按 id 认领响应，两个 session/prompt
+   * 同时在飞互不干扰——实测两路输出在时间线上真的穿插。以前发不出去只是因为
+   * 这里写死了 this.sessionId。
+   */
+  async prompt(input: string | PromptPart[], sessionId?: string): Promise<JsonObject> {
+    const target = sessionId?.trim() || this.sessionId;
+    if (!target) throw new Error("Grok 会话尚未连接");
     const prompt = typeof input === "string" ? [{ type: "text", text: input }] : input;
     return this.request(
       "session/prompt",
       {
-        sessionId: this.sessionId,
+        sessionId: target,
         prompt,
       },
       60 * 60 * 1000,
     );
   }
 
-  async cancel(): Promise<void> {
-    if (!this.sessionId) return;
+  /** 只停某一个会话。不传就停当前的。 */
+  async cancel(sessionId?: string): Promise<void> {
+    const target = sessionId?.trim() || this.sessionId;
+    if (!target) return;
     await this.send({
       jsonrpc: "2.0",
       method: "session/cancel",
-      params: { sessionId: this.sessionId },
+      params: { sessionId: target },
     });
   }
 

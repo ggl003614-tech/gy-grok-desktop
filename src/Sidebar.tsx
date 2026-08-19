@@ -8,6 +8,8 @@ import {
   Pencil,
   Plus,
   Search,
+  LoaderCircle,
+  Square,
 } from "lucide-react";
 import {
   OTHER_FOLDER_KEY,
@@ -35,6 +37,8 @@ export function Sidebar({
   onOpenThread,
   onRenameThread,
   onCollapse,
+  threadState,
+  onStopThread,
 }: {
   project?: string;
   currentSessionId?: string;
@@ -50,6 +54,9 @@ export function Sidebar({
   onOpenThread: (session: RemoteSession) => void;
   onRenameThread: (session: RemoteSession, title: string) => void;
   onCollapse: () => void;
+  /** 后台线程的状态：在跑，还是切走之后攒了新内容。 */
+  threadState?: (sessionId: string) => "running" | "unseen" | "none";
+  onStopThread?: (sessionId: string) => void;
 }) {
   const t = useT();
   const visible = filterFolderTree(folders, query);
@@ -123,10 +130,12 @@ export function Sidebar({
                       {folder.sessions.length === 0 ? (
                         <p className="tree-empty nested">{t("sidebar.folderEmpty")}</p>
                       ) : (
-                        folder.sessions.map((session) => (
+                        folder.sessions.map((session) => {
+                          const badge = threadState?.(session.sessionId) ?? "none";
+                          return (
                           <div
                             key={session.sessionId}
-                            className={`tree-thread ${session.sessionId === currentSessionId ? "active" : ""}`}
+                            className={`tree-thread ${session.sessionId === currentSessionId ? "active" : ""} badge-${badge}`}
                           >
                             {editingId === session.sessionId ? (
                               <input
@@ -161,8 +170,26 @@ export function Sidebar({
                                   }}
                                   title={`${sessionTitle(session)}（双击重命名）`}
                                 >
+                                  {badge === "running" ? (
+                                    <LoaderCircle size={11} className="spin thread-badge" />
+                                  ) : badge === "unseen" ? (
+                                    <i className="thread-badge dot" />
+                                  ) : null}
                                   <span>{sessionTitle(session)}</span>
                                 </button>
+                                {badge === "running" ? (
+                                  <button
+                                    className="tree-stop-btn"
+                                    title={t("sidebar.stopThread")}
+                                    aria-label={t("sidebar.stopThread")}
+                                    onClick={(event) => {
+                                      event.stopPropagation();
+                                      onStopThread?.(session.sessionId);
+                                    }}
+                                  >
+                                    <Square size={9} />
+                                  </button>
+                                ) : null}
                                 <button
                                   className="tree-rename-btn"
                                   title="重命名"
@@ -178,7 +205,8 @@ export function Sidebar({
                               </>
                             )}
                           </div>
-                        ))
+                          );
+                        })
                       )}
                     </div>
                   )}

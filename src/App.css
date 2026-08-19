@@ -1272,6 +1272,31 @@ button.computer-chip:disabled { cursor: default; opacity: .3; }
 .tasks-chip:hover { color: var(--text); border-color: var(--text); }
 .tasks-chip .spin { flex: none; }
 
+/* 后台还有线程在跑的提示。跟 .tasks-chip 一个灰度，但不可点 —— 它只是告知，
+   要停哪个得去侧栏那一行上停，那里才知道你说的是哪个线程。 */
+.threads-chip {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 4px 10px 4px 8px;
+  border: 1px solid var(--line); border-radius: 999px;
+  color: var(--muted); font-size: 12px;
+}
+
+/* 侧栏线程行上的状态点。转圈=在跑，实心点=切走之后来了新内容。 */
+.thread-badge { flex: none; margin-right: 6px; }
+i.thread-badge.dot {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: var(--accent, #d97757); display: inline-block;
+}
+.tree-thread.badge-running .tree-thread-main span,
+.tree-thread.badge-unseen .tree-thread-main span { font-weight: 600; }
+.tree-stop-btn {
+  display: none; flex: none;
+  padding: 3px; border-radius: 4px; color: var(--muted); background: transparent;
+}
+.tree-thread.badge-running .tree-stop-btn { display: inline-flex; }
+.tree-stop-btn:hover { color: var(--red); background: var(--danger-bg, rgba(220,80,60,.12)); }
+
+
 /* 活动面板里的后台任务清单。跟工具列表共用 .activity-item 的排版，
    只在状态上做区分：失败标红，跑完的整行压暗，正在跑的保持原色。 */
 .task-list .activity-item strong {
@@ -1280,4 +1305,9 @@ button.computer-chip:disabled { cursor: default; opacity: .3; }
 .task-list .activity-item.task-completed { opacity: .55; }
 .task-list .activity-item.task-failed strong { color: var(--red); }
 .task-list .danger { color: var(--red); }
+.task-stop {
+  flex: none; padding: 3px; border-radius: 4px;
+  color: var(--muted); background: transparent;
+}
+.task-stop:hover { color: var(--red); background: var(--danger-bg, rgba(220,80,60,.12)); }
 

@@ -472,6 +472,10 @@ pub struct GrokDiskSession {
     pub created_at: Option<String>,
     pub num_chat_messages: Option<u64>,
     pub has_user_query: bool,
+    /// summary.json 里的 session_kind。子智能体是 "subagent"，普通线程没有这个字段。
+    pub kind: Option<String>,
+    /// 子智能体的角色，比如 general-purpose。
+    pub agent_name: Option<String>,
     pub context_tokens_used: Option<u64>,
     pub context_window_tokens: Option<u64>,
     pub context_window_usage: Option<u64>,
@@ -495,6 +499,10 @@ struct SummaryFile {
     updated_at: Option<String>,
     last_active_at: Option<String>,
     num_chat_messages: Option<u64>,
+    /// 子智能体也是正常会话，跟用户线程躺在同一个目录树里，只有这个字段能区分。
+    /// 不读它的话，Grok 每起一个子智能体，侧栏就多一条看不懂的线程。
+    session_kind: Option<String>,
+    agent_name: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -532,6 +540,8 @@ fn read_session_dir(dir: &std::path::Path) -> Option<GrokDiskSession> {
         .filter(|value| !value.trim().is_empty())
         .or_else(|| summary.session_summary.clone().filter(|value| !value.trim().is_empty()));
     let has_user_query = summary.num_chat_messages.unwrap_or(0) > 0;
+    let kind = summary.session_kind.clone();
+    let agent_name = summary.agent_name.clone();
     Some(GrokDiskSession {
         session_id,
         title,
@@ -541,6 +551,8 @@ fn read_session_dir(dir: &std::path::Path) -> Option<GrokDiskSession> {
         created_at: summary.created_at,
         num_chat_messages: summary.num_chat_messages,
         has_user_query,
+        kind,
+        agent_name,
         context_tokens_used: signals.as_ref().and_then(|item| item.context_tokens_used),
         context_window_tokens: signals.as_ref().and_then(|item| item.context_window_tokens),
         context_window_usage: signals.as_ref().and_then(|item| item.context_window_usage),

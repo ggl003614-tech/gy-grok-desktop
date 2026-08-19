@@ -72,6 +72,15 @@ import {
   type BackgroundTask,
 } from "./backgroundTasks";
 import {
+  appendBackground,
+  captureSnapshot,
+  runningThreadCount,
+  shouldReleaseComposer,
+  threadBadge,
+  updateTarget,
+  type ThreadSnapshot,
+} from "./threadRuntime";
+import {
   lookupForConnect,
   projectPathKey,
   sameProjectPath,
@@ -400,6 +409,11 @@ function App() {
   const [busy, setBusy] = useState(false);
   // CLI 一直在后台跑命令和子智能体，只是以前全混在对话里看不出来。
   const [backgroundTasks, setBackgroundTasks] = useState<BackgroundTask[]>([]);
+  // 切走的线程存这儿继续收 update。正在看的那个不在里面，它走原来的 items。
+  const [threadSnapshots, setThreadSnapshots] = useState<Record<string, ThreadSnapshot>>({});
+  // 异步回调里要读「现在看的是哪个会话」，state 会读到闭包里的旧值。
+  const activeRemoteRef = useRef("");
+  const threadSnapshotsRef = useRef<Record<string, ThreadSnapshot>>({});
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [sidebarWidth, setSidebarWidth] = useState(() => {
     const stored = Number(localStorage.getItem("grok-desk-sidebar-width"));
@@ -606,6 +620,37 @@ function App() {
       const update = ((params.update && typeof params.update === "object")
         ? params.update
         : params) as JsonObject;
+
+      // 一条 update 属于哪个线程。以前这里不看 sessionId，所有会话的输出都往
+      // 同一份 items 里倒 —— 这就是为什么并发跑起来会串台。
+      const from = String(params.sessionId ?? update.sessionId ?? "");
+      const target = updateTarget(
+        from,
+        activeRemoteRef.current,
+        Object.keys(threadSnapshotsRef.current),
+      );
+      if (target === "drop") return;
+      if (target === "background") {
+        const parsed = parseSessionUpdate(update);
+        if (parsed.kind === "ignore") return;
+        setThreadSnapshots((current) => {
+          const snapshot = current[from];
+          if (!snapshot) return current;
+          if (parsed.kind === "usage") {
+            return {
+              ...current,
+              [from]: { ...snapshot, usage: { ...snapshot.usage, ...parsed.usage }, updatedAt: Date.now() },
+            };
+          }
+          const next = appendBackground(
+            { ...snapshot, tasks: reduceBackgroundTasks(snapshot.tasks, update, Date.now()) },
+            (items) => applyParsedUpdate(items, parsed),
+            Date.now(),
+          );
+          return next === snapshot ? current : { ...current, [from]: next };
+        });
+        return;
+      }
       if (update.sessionUpdate === "available_commands_update") {
         const commands = Array.isArray(update.availableCommands)
           ? update.availableCommands
@@ -882,6 +927,15 @@ function App() {
   useEffect(() => {
     localSessionIdRef.current = localSessionId;
   }, [localSessionId]);
+
+  // 这两个 ref 给异步回调用。一轮 prompt 可能跑几分钟，期间人早就切到别的线程了，
+  // state 闭包里存的还是发起时那一刻的值。
+  useEffect(() => {
+    activeRemoteRef.current = connectionInfo?.sessionId ?? "";
+  }, [connectionInfo?.sessionId]);
+  useEffect(() => {
+    threadSnapshotsRef.current = threadSnapshots;
+  }, [threadSnapshots]);
 
   useEffect(() => {
     const key = connectionInfo?.sessionId || localSessionId;
@@ -1412,6 +1466,9 @@ function App() {
     setInput("");
     setAttachments([]);
     setBusy(true);
+    // 这一轮属于哪个会话，在发出去那一刻就钉死。中途人切走了，回来的结果
+    // 也还得算回这个线程头上，不能落到人眼前的那个。
+    const turnSessionId = connectionInfo?.sessionId ?? client.activeSessionId;
     if (localSessionId && saveHistory) {
       void invoke("append_local_message", {
         sessionId: localSessionId,
@@ -1421,7 +1478,7 @@ function App() {
       }).catch(() => undefined);
     }
     try {
-      await client.prompt(parts);
+      await client.prompt(parts, turnSessionId);
       const response = [...itemsRef.current]
         .reverse()
         .find((item) => item.kind === "assistant" && item.text.trim());
@@ -1436,14 +1493,70 @@ function App() {
     } catch (error) {
       addError(String(error));
     } finally {
-      setBusy(false);
+      // 人还在这个线程上才解锁输入框；已经切走的话，要解的是快照里那个 busy,
+      // 否则会把眼前这个线程的输入框错误地解开。
+      if (shouldReleaseComposer(turnSessionId, activeRemoteRef.current)) {
+        setBusy(false);
+      } else {
+        setThreadSnapshots((current) => {
+          const snapshot = current[turnSessionId];
+          return snapshot
+            ? { ...current, [turnSessionId]: { ...snapshot, busy: false, updatedAt: Date.now() } }
+            : current;
+        });
+      }
       if (lifeConfig.enabled) void refreshCredits();
     }
   };
 
   const cancelPrompt = async () => {
-    await client.cancel();
+    await client.cancel(connectionInfo?.sessionId);
     setBusy(false);
+  };
+
+  /**
+   * 停掉一个后台任务（后台命令或子智能体）。
+   *
+   * GUI 没法直接调 kill_command_or_subagent —— 那是 agent 的工具，77 个斜杠命令里
+   * 也没有对应的入口。唯一的路是发一条 prompt 让 Grok 自己去调。
+   *
+   * 实测过代价：同一个会话上再发一条 prompt，正在跑的那一轮会直接返回 cancelled。
+   * 也就是说「停这个任务」必然打断当前这轮对话。按钮提示里写清楚了。
+   */
+  const stopBackgroundTask = async (task: BackgroundTask) => {
+    const target = connectionInfo?.sessionId ?? client.activeSessionId;
+    if (!target) return;
+    setItems((current) => [
+      ...current,
+      {
+        id: crypto.randomUUID(),
+        kind: "status",
+        title: t("tasks.stopping"),
+        text: task.title || task.id,
+      },
+    ]);
+    setBusy(true);
+    try {
+      await client.prompt(
+        `使用 kill_command_or_subagent 停掉任务 ${task.id}，然后用一句话告诉我结果。`,
+        target,
+      );
+    } catch (error) {
+      addError(String(error));
+    } finally {
+      if (shouldReleaseComposer(target, activeRemoteRef.current)) setBusy(false);
+    }
+  };
+
+  /** 停掉某个后台线程，不用先切过去。 */
+  const cancelThread = async (sessionId: string) => {
+    await client.cancel(sessionId);
+    setThreadSnapshots((current) => {
+      const snapshot = current[sessionId];
+      return snapshot
+        ? { ...current, [sessionId]: { ...snapshot, busy: false, updatedAt: Date.now() } }
+        : current;
+    });
   };
 
   const runCheck = (id: CheckActionId) => {
@@ -1594,14 +1707,19 @@ function App() {
     setWorkspacePage("chat");
     setDraftConversation(false);
     try {
+      // 先封存再开新的。newSession 不重启进程，旧线程还在后台跑着。
+      stashActiveThread();
       const remoteSessionId = await client.newSession();
       if (selectedModel) {
         await client.setSessionModel(selectedModel, selectedEffort || undefined);
       }
       setItems([]);
       setUsage({});
+      setBackgroundTasks([]);
+      setBusy(false);
       setPermission(undefined);
       setAvailableCommands([]);
+      activeRemoteRef.current = remoteSessionId;
       setConnectionInfo((current) =>
         current ? { ...current, sessionId: remoteSessionId } : current,
       );
@@ -1670,11 +1788,55 @@ function App() {
     });
   };
 
+  /**
+   * 把当前线程封存进快照。离开它之前必须调一次 —— 不然它后续的 update
+   * 会因为「既不是当前会话、也不在缓冲区」被判成陌生会话丢掉，
+   * 那个线程就等于在后台白跑。
+   */
+  const stashActiveThread = () => {
+    const leaving = connectionInfo?.sessionId ?? "";
+    if (!leaving) return;
+    const snapshot = captureSnapshot(
+      leaving,
+      { items: itemsRef.current, usage, tasks: backgroundTasks, busy },
+      Date.now(),
+    );
+    threadSnapshotsRef.current = { ...threadSnapshotsRef.current, [leaving]: snapshot };
+    setThreadSnapshots((current) => ({ ...current, [leaving]: snapshot }));
+  };
+
   const openRemoteSession = async (session: RemoteSession) => {
     if (connectionInfo?.sessionId === session.sessionId) {
       setWorkspacePage("chat");
       return;
     }
+
+    stashActiveThread();
+
+    // 目标线程还在本进程里开着 —— 换个指针就行，不重连、不重放历史，
+    // 更不能走 loadSession，那会把它正在跑的一轮打断。
+    const cached = threadSnapshotsRef.current[session.sessionId];
+    if (cached) {
+      ++threadSwitchGen.current;
+      client.focusSession(session.sessionId);
+      activeRemoteRef.current = session.sessionId;
+      setItems(cached.items);
+      setUsage(cached.usage);
+      setBackgroundTasks(cached.tasks);
+      setBusy(cached.busy);
+      setPermission(undefined);
+      setThreadRestoring(false);
+      const rest = { ...threadSnapshotsRef.current };
+      delete rest[session.sessionId];
+      threadSnapshotsRef.current = rest;
+      setThreadSnapshots(rest);
+      setConnectionInfo((current) =>
+        current ? { ...current, sessionId: session.sessionId } : current,
+      );
+      setWorkspacePage("chat");
+      return;
+    }
+
     const gen = ++threadSwitchGen.current;
     await persistTranscript();
     setThreadRestoring(true);
@@ -2241,6 +2403,12 @@ function App() {
   }, [localSessionId]);
   const connected = connection === "connected";
 
+  // 别的线程还有几个在跑。并发之后这个数才可能大于 0。
+  const backgroundThreadsRunning = runningThreadCount(
+    threadSnapshots,
+    connectionInfo?.sessionId ?? "",
+  );
+
   // 「1 个命令 · 2 个子智能体」。没有在跑的就是空串，整个提示不渲染。
   const tasksRunning = runningSummary(backgroundTasks, (kind, count) =>
     t(kind === "command" ? "tasks.commandCount" : "tasks.subagentCount", { n: count }),
@@ -2395,6 +2563,8 @@ function App() {
         onOpenThread={(session) => void openThreadFromTree(session)}
         onRenameThread={(session, title) => void renameRemoteSession(session, title)}
         onCollapse={() => setSidebarOpen(false)}
+        threadState={(sessionId) => threadBadge(threadSnapshots[sessionId])}
+        onStopThread={(sessionId) => void cancelThread(sessionId)}
       >
         <div className="sidebar-resizer" onMouseDown={startSidebarResize} title={t("sidebar.resize")} />
         <div className="sidebar-account">
@@ -2907,6 +3077,12 @@ function App() {
                         ) : null}
                       </span>
                     ) : null}
+                    {backgroundThreadsRunning > 0 ? (
+                      <span className="threads-chip" title={t("composer.threadsRunningTitle")}>
+                        <LoaderCircle size={13} className="spin" />
+                        {t("composer.threadsRunning", { n: backgroundThreadsRunning })}
+                      </span>
+                    ) : null}
                     {tasksRunning ? (
                       <button
                         type="button"
@@ -3018,6 +3194,16 @@ function App() {
                           {task.durationSecs ? ` · ${Math.round(task.durationSecs)}s` : ""}
                         </span>
                       </div>
+                      {task.status === "running" ? (
+                        <button
+                          className="task-stop"
+                          title={t("tasks.stopTitle")}
+                          aria-label={t("tasks.stop")}
+                          onClick={() => void stopBackgroundTask(task)}
+                        >
+                          <Square size={10} />
+                        </button>
+                      ) : null}
                       {task.status === "running"
                         ? <LoaderCircle size={13} className="spin" />
                         : task.status === "failed"

@@ -12,6 +12,8 @@ export interface SidebarSession {
   updatedAt?: string;
   numChatMessages?: number;
   hasUserQuery?: boolean;
+  /** 磁盘上的 session_kind，子智能体是 "subagent"。 */
+  kind?: string;
 }
 
 export interface SidebarFolder {
@@ -53,7 +55,20 @@ function isPlaceholderTitle(title: string) {
     || /^线程 [0-9a-f]{8}$/i.test(title);
 }
 
+/**
+ * 子智能体是不是该从线程列表里藏掉。
+ *
+ * Grok 起的每个子智能体都是一个真会话，跟用户线程存在同一个目录树里（父会话的
+ * subagents/ 里只有一份 meta.json，正片在外面）。所以跑一次带子智能体的任务，
+ * 侧栏就凭空多出几条谁也看不懂的线程。它们的内容本来就会流进父对话，
+ * 不该再单独占一行。
+ */
+export function isSubagentSession(session: SidebarSession) {
+  return session.kind === "subagent";
+}
+
 export function isJunkSession(session: SidebarSession) {
+  if (isSubagentSession(session)) return true;
   const title = (session.title || session.summary || "").trim();
   const named = Boolean(title) && !isPlaceholderTitle(title);
   const messages = session.numChatMessages ?? 0;
