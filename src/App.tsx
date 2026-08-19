@@ -1573,14 +1573,13 @@ function App() {
     } catch (error) {
       addError(String(error));
     } finally {
-      // 被插话顶掉的旧一轮：什么都别碰，状态归新一轮管。
-      if (myGen !== turnGenRef.current) {
-        if (lifeConfig.enabled) void refreshCredits();
-        return;
-      }
+      // 被插话顶掉的旧一轮什么都不碰，状态归新一轮管（finally 里不用
+      // return —— 那会吞掉 try 里的控制流）。
       // 人还在这个线程上才解锁输入框；已经切走的话，要解的是快照里那个 busy,
       // 否则会把眼前这个线程的输入框错误地解开。
-      if (shouldReleaseComposer(turnSessionId, activeRemoteRef.current)) {
+      if (myGen !== turnGenRef.current) {
+        // 旧轮收尾只剩刷新额度这一件事，在下面统一做。
+      } else if (shouldReleaseComposer(turnSessionId, activeRemoteRef.current)) {
         setBusy(false);
         maybeContinueGoal(turnSessionId);
       } else {
