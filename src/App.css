@@ -1274,6 +1274,16 @@ button.computer-chip:disabled { cursor: default; opacity: .3; }
 
 /* 后台还有线程在跑的提示。跟 .tasks-chip 一个灰度，但不可点 —— 它只是告知，
    要停哪个得去侧栏那一行上停，那里才知道你说的是哪个线程。 */
+/* goal 自动续跑的状态胶囊。可点（停止续跑），用主题色区别于旁边只读的灰胶囊。 */
+.goal-chip {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 4px 10px 4px 8px;
+  border: 1px solid var(--accent, #d97757); border-radius: 999px;
+  color: var(--accent, #d97757); background: transparent;
+  font-size: 12px; cursor: pointer;
+}
+.goal-chip:hover { background: rgba(217,119,87,.12); }
+
 .threads-chip {
   display: inline-flex; align-items: center; gap: 5px;
   padding: 4px 10px 4px 8px;

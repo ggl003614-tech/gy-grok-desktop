@@ -450,6 +450,12 @@ const zh: Dict = {
   "sidebar.deleteYes": "确认删除",
   "sidebar.deleteNo": "取消",
   "sidebar.deleted": "线程已删除",
+  "goal.round": "goal 自动续跑：第 {n} 轮",
+  "goal.finished": "goal 已完成，自动续跑结束",
+  "goal.capped": "goal 自动续跑到达轮数上限，先停下来给你看看",
+  "goal.stopped": "goal 自动续跑已停",
+  "goal.chip": "goal 续跑中 · 第 {n} 轮",
+  "goal.chipTitle": "GUI 在替 goal 踢下一轮（stdio 通道上它不会自己醒）。点一下停止自动续跑，goal 本身用 /goal pause 暂停。",
 };
 
 const en: Dict = {
@@ -898,6 +904,12 @@ const en: Dict = {
   "sidebar.deleteYes": "Confirm delete",
   "sidebar.deleteNo": "Cancel",
   "sidebar.deleted": "Thread deleted",
+  "goal.round": "Goal auto-continue: round {n}",
+  "goal.finished": "Goal finished — auto-continue stopped",
+  "goal.capped": "Goal auto-continue hit the round cap — pausing for review",
+  "goal.stopped": "Goal auto-continue stopped",
+  "goal.chip": "Goal running · round {n}",
+  "goal.chipTitle": "The GUI kicks off each next goal round (rounds don't self-wake over stdio). Click to stop auto-continue; pause the goal itself with /goal pause.",
 };
 
 const tables: Record<Locale, Dict> = { zh, en };

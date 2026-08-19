@@ -81,6 +81,7 @@ import {
   type ThreadSnapshot,
 } from "./threadRuntime";
 import { isPersistJobValid, schedulePersist } from "./transcriptPersist";
+import { GOAL_NUDGE, decideGoalContinue, parseGoalCommand } from "./goalRunner";
 import {
   lookupForConnect,
   projectPathKey,
@@ -412,6 +413,14 @@ function App() {
   const [backgroundTasks, setBackgroundTasks] = useState<BackgroundTask[]>([]);
   // 切走的线程存这儿继续收 update。正在看的那个不在里面，它走原来的 items。
   const [threadSnapshots, setThreadSnapshots] = useState<Record<string, ThreadSnapshot>>({});
+  // goal 自动续跑。实测 /goal 的下一轮在 stdio 通道上不会自己醒（TUI 里是宿主踢的，
+  // 走 ACP 宿主就是我们），所以一轮正常结束后 GUI 主动补一条续跑提示。
+  const [goalAutoRunning, setGoalAutoRunning] = useState(false);
+  const goalActiveRef = useRef(false);
+  const goalRoundsRef = useRef(0);
+  const busyRef = useRef(false);
+  // 用户按停 = 明确说「别自动续了」。发新 prompt 时复位。
+  const cancelledRef = useRef(false);
   // 异步回调里要读「现在看的是哪个会话」，state 会读到闭包里的旧值。
   const activeRemoteRef = useRef("");
   const threadSnapshotsRef = useRef<Record<string, ThreadSnapshot>>({});
@@ -935,6 +944,9 @@ function App() {
     activeRemoteRef.current = connectionInfo?.sessionId ?? "";
   }, [connectionInfo?.sessionId]);
   useEffect(() => {
+    busyRef.current = busy;
+  }, [busy]);
+  useEffect(() => {
     threadSnapshotsRef.current = threadSnapshots;
   }, [threadSnapshots]);
 
@@ -1451,6 +1463,41 @@ function App() {
     return () => window.clearInterval(poll);
   }, [lifeConfig.enabled, refreshCredits]);
 
+  /**
+   * 一轮结束后决定要不要替 goal 踢下一轮。踢的话延迟一拍再发，
+   * 让 React 先把 busy=false 落地，也给用户一个插话的空隙。
+   */
+  const maybeContinueGoal = (finishedSessionId: string) => {
+    const lastAssistant = [...itemsRef.current]
+      .reverse()
+      .find((item) => item.kind === "assistant" && item.text.trim());
+    const decision = decideGoalContinue({
+      goalActive: goalActiveRef.current,
+      cancelled: cancelledRef.current,
+      autoRounds: goalRoundsRef.current,
+      lifeLocked: lifeLock.locked,
+      sameSession: finishedSessionId === activeRemoteRef.current,
+      lastAssistantText: lastAssistant?.text ?? "",
+    });
+    if (!decision.continue) {
+      // switched 只是暂停（切回来下一轮结束后还会试）；其余情况彻底收摊。
+      if (decision.reason !== "switched" && decision.reason !== "inactive") {
+        goalActiveRef.current = decision.reason === "locked" ? goalActiveRef.current : false;
+        setGoalAutoRunning(false);
+        if (decision.reason === "done") setStatusMessage(t("goal.finished"));
+        if (decision.reason === "cap") setStatusMessage(t("goal.capped"));
+      }
+      return;
+    }
+    goalRoundsRef.current += 1;
+    setStatusMessage(t("goal.round", { n: goalRoundsRef.current }));
+    window.setTimeout(() => {
+      // 空隙期间用户开始打字或点了停，就把这一轮让给人。
+      if (!goalActiveRef.current || busyRef.current) return;
+      void sendPrompt(GOAL_NUDGE);
+    }, 1200);
+  };
+
   const sendPrompt = async (value = input) => {
     const prompt = value.trim();
     if (lifeLock.locked) return;
@@ -1478,9 +1525,23 @@ function App() {
     setInput("");
     setAttachments([]);
     setBusy(true);
+    cancelledRef.current = false;
     // 这一轮属于哪个会话，在发出去那一刻就钉死。中途人切走了，回来的结果
     // 也还得算回这个线程头上，不能落到人眼前的那个。
     const turnSessionId = connectionInfo?.sessionId ?? client.activeSessionId;
+    // 用户亲手输入的 /goal 命令改变续跑状态；自动续跑发出的 nudge 不走这里。
+    const goalCommand = parseGoalCommand(prompt);
+    if (goalCommand === "start" || goalCommand === "resume") {
+      goalActiveRef.current = true;
+      goalRoundsRef.current = 0;
+      setGoalAutoRunning(true);
+    } else if (goalCommand === "stop") {
+      goalActiveRef.current = false;
+      setGoalAutoRunning(false);
+    } else if (goalCommand === null && goalActiveRef.current) {
+      // 人插话了：自动轮数归零，人说的话优先，但 goal 状态不变。
+      goalRoundsRef.current = 0;
+    }
     if (localSessionId && saveHistory) {
       void invoke("append_local_message", {
         sessionId: localSessionId,
@@ -1509,6 +1570,7 @@ function App() {
       // 否则会把眼前这个线程的输入框错误地解开。
       if (shouldReleaseComposer(turnSessionId, activeRemoteRef.current)) {
         setBusy(false);
+        maybeContinueGoal(turnSessionId);
       } else {
         setThreadSnapshots((current) => {
           const snapshot = current[turnSessionId];
@@ -1522,6 +1584,11 @@ function App() {
   };
 
   const cancelPrompt = async () => {
+    // 人按了停：这一轮取消，goal 自动续跑也一起收摊 —— 停就是停，
+    // 不能过 1.2 秒又自己爬起来。
+    cancelledRef.current = true;
+    goalActiveRef.current = false;
+    setGoalAutoRunning(false);
     await client.cancel(connectionInfo?.sessionId);
     setBusy(false);
   };
@@ -3144,6 +3211,21 @@ function App() {
                           </em>
                         ) : null}
                       </span>
+                    ) : null}
+                    {goalAutoRunning ? (
+                      <button
+                        type="button"
+                        className="goal-chip"
+                        title={t("goal.chipTitle")}
+                        onClick={() => {
+                          goalActiveRef.current = false;
+                          setGoalAutoRunning(false);
+                          setStatusMessage(t("goal.stopped"));
+                        }}
+                      >
+                        <Sparkles size={13} />
+                        {t("goal.chip", { n: goalRoundsRef.current })}
+                      </button>
                     ) : null}
                     {backgroundThreadsRunning > 0 ? (
                       <span className="threads-chip" title={t("composer.threadsRunningTitle")}>
