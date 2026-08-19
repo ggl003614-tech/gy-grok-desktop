@@ -8,6 +8,7 @@ import {
   parseSessionUpdate,
   redactForDisplay,
   toolSummary,
+  isHarnessPrompt,
 } from "./sessionUpdates";
 
 describe("ACP session updates", () => {
@@ -295,5 +296,37 @@ describe("交替流式块的合并", () => {
     items = applyParsedUpdate(items, chunk("assistant", "读完了"));
 
     expect(items.filter((i) => i.kind === "assistant")).toHaveLength(2);
+  });
+});
+
+describe("goal 内部指令识别", () => {
+  it("认出 Summarizer / Plan Writer / 验证器提示词", () => {
+    // 原文来自用户截图和本机被污染的会话标题
+    expect(isHarnessPrompt(
+      "You are the Goal Summarizer for the xAI Grok Build harness. The goal has just been VERIFIED as achieved.",
+    )).toBe(true);
+    expect(isHarnessPrompt("You are the Goal Plan Writer for the harness. Write the plan.")).toBe(true);
+    expect(isHarnessPrompt("You are an **adversarial verifier** for goal completion claims.")).toBe(true);
+  });
+
+  it("真实用户消息不被误伤", () => {
+    expect(isHarnessPrompt("帮我改一下预览面板")).toBe(false);
+    expect(isHarnessPrompt("You are welcome to review my code")).toBe(false);
+    // 用户就是在聊角色扮演也不该折叠 —— 没有 harness 特征词
+    expect(isHarnessPrompt("You are a helpful assistant, please answer in Chinese")).toBe(false);
+  });
+
+  it("user_message_chunk 解析时打上 harness 标记", () => {
+    const parsed = parseSessionUpdate({
+      sessionUpdate: "user_message_chunk",
+      content: { type: "text", text: "You are the Goal Summarizer for the xAI Grok Build harness. Recap." },
+    });
+    expect(parsed.kind).toBe("chunk");
+    if (parsed.kind === "chunk") expect(parsed.item.harness).toBe(true);
+    const normal = parseSessionUpdate({
+      sessionUpdate: "user_message_chunk",
+      content: { type: "text", text: "继续修那个按钮" },
+    });
+    if (normal.kind === "chunk") expect(normal.item.harness).toBeUndefined();
   });
 });

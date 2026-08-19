@@ -419,6 +419,9 @@ function App() {
   const goalActiveRef = useRef(false);
   const goalRoundsRef = useRef(0);
   const busyRef = useRef(false);
+  // 插话会让两轮 prompt 短暂并存（旧的一轮被 agent 取消、新的接管）。
+  // 只有最新一代才有资格在结束时解锁输入框、触发 goal 续跑。
+  const turnGenRef = useRef(0);
   // 用户按停 = 明确说「别自动续了」。发新 prompt 时复位。
   const cancelledRef = useRef(false);
   // 异步回调里要读「现在看的是哪个会话」，state 会读到闭包里的旧值。
@@ -1501,7 +1504,10 @@ function App() {
   const sendPrompt = async (value = input) => {
     const prompt = value.trim();
     if (lifeLock.locked) return;
-    if (busy || connection !== "connected" || draftConversation) return;
+    if (connection !== "connected" || draftConversation) return;
+    // 忙的时候照样能发 —— 这就是「插话」。实测同一会话再发一条 prompt，
+    // 正在跑的那轮会立刻以 cancelled 收场、新的接管，跟 TUI 的
+    // 「send a message to interrupt」同一机制。
     if (!prompt && attachments.length === 0) return;
     const pending = attachments;
     const parts = buildPromptParts(
@@ -1526,6 +1532,7 @@ function App() {
     setAttachments([]);
     setBusy(true);
     cancelledRef.current = false;
+    const myGen = ++turnGenRef.current;
     // 这一轮属于哪个会话，在发出去那一刻就钉死。中途人切走了，回来的结果
     // 也还得算回这个线程头上，不能落到人眼前的那个。
     const turnSessionId = connectionInfo?.sessionId ?? client.activeSessionId;
@@ -1566,6 +1573,11 @@ function App() {
     } catch (error) {
       addError(String(error));
     } finally {
+      // 被插话顶掉的旧一轮：什么都别碰，状态归新一轮管。
+      if (myGen !== turnGenRef.current) {
+        if (lifeConfig.enabled) void refreshCredits();
+        return;
+      }
       // 人还在这个线程上才解锁输入框；已经切走的话，要解的是快照里那个 busy,
       // 否则会把眼前这个线程的输入框错误地解开。
       if (shouldReleaseComposer(turnSessionId, activeRemoteRef.current)) {
@@ -3267,7 +3279,19 @@ function App() {
                     ) : null}
                   </div>
                   {busy ? (
-                    <button className="stop-button" onClick={cancelPrompt}><CircleStop size={17} /></button>
+                    <>
+                      {input.trim() ? (
+                        <button
+                          className="send-button interject"
+                          title={t("composer.interject")}
+                          aria-label={t("composer.interject")}
+                          onClick={() => sendPrompt()}
+                        >
+                          <Send size={17} />
+                        </button>
+                      ) : null}
+                      <button className="stop-button" onClick={cancelPrompt}><CircleStop size={17} /></button>
+                    </>
                   ) : (
                     <button className="send-button" onClick={() => sendPrompt()} disabled={draftConversation || (!input.trim() && attachments.length === 0)}><Send size={17} /></button>
                   )}
@@ -3688,6 +3712,16 @@ function ConversationImages({
 function TimelineCard({ item, project }: { item: TimelineItem; project?: string }) {
   const t = useT();
   if (item.kind === "user") {
+    // goal 驱动器注入的内部指令：不是用户说的话，折叠成一行，免得
+    // 大段英文提示词冒充「你」出现在对话里。想看的点开。
+    if (item.harness) {
+      return (
+        <details className="harness-item">
+          <summary>{t("timeline.harnessPrompt")}</summary>
+          <pre>{item.text}</pre>
+        </details>
+      );
+    }
     return (
       <div className="message user-message">
         <div className="message-label">{t("you")}</div>

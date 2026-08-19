@@ -456,6 +456,8 @@ const zh: Dict = {
   "goal.stopped": "goal 自动续跑已停",
   "goal.chip": "goal 续跑中 · 第 {n} 轮",
   "goal.chipTitle": "GUI 在替 goal 踢下一轮（stdio 通道上它不会自己醒）。点一下停止自动续跑，goal 本身用 /goal pause 暂停。",
+  "timeline.harnessPrompt": "goal 内部指令（点开看原文）",
+  "composer.interject": "插话：打断当前这轮，立刻说你的",
 };
 
 const en: Dict = {
@@ -910,6 +912,8 @@ const en: Dict = {
   "goal.stopped": "Goal auto-continue stopped",
   "goal.chip": "Goal running · round {n}",
   "goal.chipTitle": "The GUI kicks off each next goal round (rounds don't self-wake over stdio). Click to stop auto-continue; pause the goal itself with /goal pause.",
+  "timeline.harnessPrompt": "Goal internal prompt (click to expand)",
+  "composer.interject": "Interject: interrupt this turn and say yours now",
 };
 
 const tables: Record<Locale, Dict> = { zh, en };

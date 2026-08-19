@@ -22,6 +22,9 @@ export interface TimelineItem {
   toolCallId?: string;
   images?: TimelineImage[];
   source?: "local" | "remote";
+  /** goal 驱动器注入的内部指令（Summarizer / Plan Writer / 验证器提示词）。
+   *  它们走 user_message_chunk 混进来，界面上会冒充「你」说的话，要折叠。 */
+  harness?: boolean;
   raw?: JsonObject;
 }
 
@@ -276,20 +279,39 @@ function contentText(content: unknown): string {
   return textFromContent(content);
 }
 
+/**
+ * 这条「用户消息」是不是 goal 驱动器的内部指令。
+ *
+ * goal 每轮会注入 Summarizer / Plan Writer / adversarial verifier 这类提示词，
+ * 协议上它们跟真的用户输入没有任何区别（都是 user_message_chunk，没有 _meta 标记），
+ * 只能按文案特征认。特征来自真实数据：本机数据库里被污染的会话标题、
+ * 以及用户截图里的原文（"You are the Goal Summarizer for the xAI Grok Build harness"）。
+ */
+export function isHarnessPrompt(text: string): boolean {
+  const head = text.trimStart().slice(0, 200);
+  if (!head.startsWith("You are ")) return false;
+  return (
+    head.includes("Grok Build harness") ||
+    /^You are (?:the|an?) .{0,80}(?:Summarizer|Plan Writer|[Vv]erifier)/.test(head)
+  );
+}
+
 export function parseSessionUpdate(update: JsonObject): ParsedUpdate {
   const type = String(update.sessionUpdate ?? "");
   const id = crypto.randomUUID();
 
   if (type === "user_message_chunk") {
+    const userText = contentText(update.content);
     return {
       kind: "chunk",
       item: {
         id,
         kind: "user",
-        text: contentText(update.content),
+        harness: isHarnessPrompt(userText) || undefined,
+        text: userText,
         images: mergeTimelineImages(
           imagesFromContent(update.content),
-          imagesFromMarkdown(contentText(update.content)),
+          imagesFromMarkdown(userText),
         ),
       },
     };
