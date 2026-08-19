@@ -86,9 +86,16 @@ src-tauri/src/computer.rs  内置电脑控制（截屏/键鼠，纯 win32）
 npm install
 npx tsc -b               # 类型
 npx vitest run           # 前端 187 个测试
-cd src-tauri && cargo test   # Rust 55 个测试
-npm run tauri dev        # 开发跑起来
+npm run lint             # oxlint（存量 16 条警告是已知的，别新增）
+cd src-tauri
+cargo fmt -- --check     # CI 会卡这个 —— 提交前必跑
+cargo test               # Rust 55 个测试
+cargo clippy --all-targets -- -D warnings   # CI 也卡这个
+cd .. && npm run tauri dev
 ```
+
+> 教训：CI 的门比「测试通过」多两道（fmt + clippy）。第一条 commit 起 CI
+> 就是红的，就是因为本地一直没跑这两条。Mac 上写完代码照上面全跑一遍。
 
 ## 数据位置（Windows，Mac 对应改）
 
