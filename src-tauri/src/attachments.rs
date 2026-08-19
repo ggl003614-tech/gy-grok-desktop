@@ -117,12 +117,12 @@ pub fn import_attachments(
         let destination = inbox.join(&stored_name);
         fs::copy(&source, &destination).map_err(|error| format!("无法复制附件：{error}"))?;
         let (mime, kind) = mime_and_kind(&destination);
-        let bytes = if matches!(kind, "text" | "image") && metadata.len() as usize <= MAX_IMAGE_PREVIEW
-        {
-            fs::read(&destination).ok()
-        } else {
-            None
-        };
+        let bytes =
+            if matches!(kind, "text" | "image") && metadata.len() as usize <= MAX_IMAGE_PREVIEW {
+                fs::read(&destination).ok()
+            } else {
+                None
+            };
         let text = if kind == "text" {
             bytes.as_ref().and_then(|content| {
                 if content.len() <= MAX_TEXT_EMBED {
@@ -135,9 +135,9 @@ pub fn import_attachments(
             None
         };
         let data_url = if kind == "image" {
-            bytes.as_ref().map(|content| {
-                format!("data:{mime};base64,{}", base64_encode(content))
-            })
+            bytes
+                .as_ref()
+                .map(|content| format!("data:{mime};base64,{}", base64_encode(content)))
         } else {
             None
         };
@@ -169,7 +169,10 @@ fn decode_data_url(data_url: &str) -> Result<(String, Vec<u8>), String> {
     if !header.contains("base64") {
         return Err("剪贴板图片需要是 base64 数据".into());
     }
-    let cleaned: String = payload.chars().filter(|character| !character.is_whitespace()).collect();
+    let cleaned: String = payload
+        .chars()
+        .filter(|character| !character.is_whitespace())
+        .collect();
     let bytes = decode_base64(&cleaned)?;
     if bytes.is_empty() {
         return Err("剪贴板图片是空的".into());
@@ -282,7 +285,11 @@ pub fn import_data_url(
     let filename = if Path::new(name.trim()).extension().is_some() {
         name
     } else {
-        format!("{}.{}", sanitize_file_name(&name), extension_for_mime(&mime))
+        format!(
+            "{}.{}",
+            sanitize_file_name(&name),
+            extension_for_mime(&mime)
+        )
     };
     write_imported_file(&root, &filename, &mime, "image", &bytes)
 }
@@ -295,7 +302,8 @@ pub fn import_folder(root: String, folder: String) -> Result<Vec<ImportedAttachm
         return Err(format!("不是文件夹：{}", directory.display()));
     }
     let mut files = Vec::new();
-    for entry in fs::read_dir(&directory).map_err(|error| format!("无法读取文件夹：{error}"))? {
+    for entry in fs::read_dir(&directory).map_err(|error| format!("无法读取文件夹：{error}"))?
+    {
         let entry = entry.map_err(|error| format!("无法读取文件夹：{error}"))?;
         let path = entry.path();
         if !path.is_file() {

@@ -529,11 +529,7 @@ fn resolve_session_title(requested: &str, existing: Option<&str>) -> String {
         .to_string()
 }
 
-pub fn save_transcript(
-    state: &StoreState,
-    session_id: &str,
-    items: &Value,
-) -> Result<(), String> {
+pub fn save_transcript(state: &StoreState, session_id: &str, items: &Value) -> Result<(), String> {
     let encoded = serde_json::to_string(items)
         .map_err(|error| format!("Could not encode transcript: {error}"))?;
     if encoded.len() > 2 * 1024 * 1024 {
@@ -682,7 +678,10 @@ mod tests {
             resolve_session_title("New task", Some("修登录闪退")),
             "修登录闪退"
         );
-        assert_eq!(resolve_session_title("给侧栏加预览", Some("New task")), "给侧栏加预览");
+        assert_eq!(
+            resolve_session_title("给侧栏加预览", Some("New task")),
+            "给侧栏加预览"
+        );
     }
 
     #[test]

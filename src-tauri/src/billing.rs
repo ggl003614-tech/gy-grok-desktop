@@ -379,10 +379,7 @@ fn post_billing_json(access_token: &str, path: &str, payload: &str) -> Result<Va
         .send_string(payload)
         .map_err(|error| format!("兑换用量重置失败：{error}"))?;
     if response.status() >= 400 {
-        return Err(format!(
-            "兑换用量重置失败：HTTP {}",
-            response.status()
-        ));
+        return Err(format!("兑换用量重置失败：HTTP {}", response.status()));
     }
     response
         .into_json()
@@ -453,6 +450,9 @@ mod tests {
         let credits = parse_billing_config(&value).unwrap();
         assert_eq!(credits.reset_available_count, 1);
         assert_eq!(credits.reset_token_id.as_deref(), Some("reset-4.6-launch"));
-        assert_eq!(credits.reset_expires_at.as_deref(), Some("2026-09-15T00:00:00Z"));
+        assert_eq!(
+            credits.reset_expires_at.as_deref(),
+            Some("2026-09-15T00:00:00Z")
+        );
     }
 }

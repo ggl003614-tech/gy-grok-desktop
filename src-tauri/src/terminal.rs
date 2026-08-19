@@ -76,7 +76,10 @@ fn default_columns() -> u16 {
 }
 
 fn normalize_appearance(value: Option<&str>) -> &'static str {
-    match value.map(|item| item.trim().to_ascii_lowercase()).as_deref() {
+    match value
+        .map(|item| item.trim().to_ascii_lowercase())
+        .as_deref()
+    {
         Some("dark") => "dark",
         _ => "light",
     }
@@ -221,7 +224,10 @@ pub fn start_grok_terminal(
     command.args(&options.args);
     command.cwd(&canonical_cwd);
     configure_pty_command(&mut command);
-    apply_cli_appearance(&mut command, normalize_appearance(options.appearance.as_deref()));
+    apply_cli_appearance(
+        &mut command,
+        normalize_appearance(options.appearance.as_deref()),
+    );
 
     let child = pair
         .slave

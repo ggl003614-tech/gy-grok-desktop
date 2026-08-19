@@ -27,9 +27,7 @@ pub fn run() {
 pub fn handle_request(request: &Value) -> Option<Value> {
     let method = request.get("method")?.as_str()?;
     let id = request.get("id").cloned();
-    if id.is_none() {
-        return None;
-    }
+    id.as_ref()?;
     let result = match method {
         "initialize" => initialize(request),
         "ping" => json!({}),
@@ -182,8 +180,12 @@ fn invoke_tool(name: &str, args: &Value) -> Result<Value, String> {
             let detail = args.get("detail").and_then(Value::as_str);
             computer::screenshot_payload(force, detail)
         }
-        "screen_info" => Ok(json!([{ "type": "text", "text": computer::screen_info()?.to_string() }])),
-        "list_windows" => Ok(json!([{ "type": "text", "text": computer::list_windows()?.to_string() }])),
+        "screen_info" => {
+            Ok(json!([{ "type": "text", "text": computer::screen_info()?.to_string() }]))
+        }
+        "list_windows" => {
+            Ok(json!([{ "type": "text", "text": computer::list_windows()?.to_string() }]))
+        }
         "focus_window" => {
             let title = args.get("title").and_then(Value::as_str).unwrap_or("");
             Ok(text(computer::focus_window(title)?))
@@ -347,7 +349,10 @@ mod tests {
             .iter()
             .find(|tool| tool["name"] == "screenshot")
             .unwrap();
-        assert!(screenshot["description"].as_str().unwrap().contains("Spends usage"));
+        assert!(screenshot["description"]
+            .as_str()
+            .unwrap()
+            .contains("Spends usage"));
         assert!(names.contains(&"click"));
         assert!(names.contains(&"type_text"));
     }

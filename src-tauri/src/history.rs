@@ -183,10 +183,7 @@ fn flush_export_item(items: &mut Vec<Value>, current: Option<(&'static str, Stri
     }
     if kind == "tool" {
         for line in text.lines() {
-            let label = line
-                .trim()
-                .trim_start_matches(['-', '*'])
-                .trim();
+            let label = line.trim().trim_start_matches(['-', '*']).trim();
             if label.is_empty() {
                 continue;
             }
@@ -213,10 +210,7 @@ fn content_text(content: Option<&Value>) -> String {
 }
 
 fn guess_image_mime(data: &str) -> &'static str {
-    let raw = data
-        .rsplit_once(',')
-        .map(|(_, rest)| rest)
-        .unwrap_or(data);
+    let raw = data.rsplit_once(',').map(|(_, rest)| rest).unwrap_or(data);
     if raw.starts_with("/9j/") {
         "image/jpeg"
     } else if raw.starts_with("iVBOR") {
@@ -538,7 +532,12 @@ fn read_session_dir(dir: &std::path::Path) -> Option<GrokDiskSession> {
     let title = summary
         .generated_title
         .filter(|value| !value.trim().is_empty())
-        .or_else(|| summary.session_summary.clone().filter(|value| !value.trim().is_empty()));
+        .or_else(|| {
+            summary
+                .session_summary
+                .clone()
+                .filter(|value| !value.trim().is_empty())
+        });
     let has_user_query = summary.num_chat_messages.unwrap_or(0) > 0;
     let kind = summary.session_kind.clone();
     let agent_name = summary.agent_name.clone();
@@ -556,7 +555,7 @@ fn read_session_dir(dir: &std::path::Path) -> Option<GrokDiskSession> {
         context_tokens_used: signals.as_ref().and_then(|item| item.context_tokens_used),
         context_window_tokens: signals.as_ref().and_then(|item| item.context_window_tokens),
         context_window_usage: signals.as_ref().and_then(|item| item.context_window_usage),
-        })
+    })
 }
 
 fn display_cwd(value: Option<String>) -> Option<String> {
@@ -589,12 +588,14 @@ pub fn list_grok_sessions(cwd: Option<String>) -> Result<Vec<GrokDiskSession>, S
         .filter(|value| !value.is_empty())
         .map(normalize_cwd_key);
     let mut sessions = Vec::new();
-    for group in fs::read_dir(&root).map_err(|error| format!("无法读取会话目录：{error}"))? {
+    for group in fs::read_dir(&root).map_err(|error| format!("无法读取会话目录：{error}"))?
+    {
         let group = group.map_err(|error| format!("无法读取会话目录：{error}"))?;
         if !group.file_type().map(|kind| kind.is_dir()).unwrap_or(false) {
             continue;
         }
-        for entry in fs::read_dir(group.path()).map_err(|error| format!("无法读取会话：{error}"))? {
+        for entry in fs::read_dir(group.path()).map_err(|error| format!("无法读取会话：{error}"))?
+        {
             let entry = entry.map_err(|error| format!("无法读取会话：{error}"))?;
             if !entry.file_type().map(|kind| kind.is_dir()).unwrap_or(false) {
                 continue;
@@ -602,7 +603,8 @@ pub fn list_grok_sessions(cwd: Option<String>) -> Result<Vec<GrokDiskSession>, S
             if let Some(session) = read_session_dir(&entry.path()) {
                 if wanted
                     .as_ref()
-                    .is_none_or(|cwd| session_matches_cwd(&session, cwd))
+                    .map(|cwd| session_matches_cwd(&session, cwd))
+                    .unwrap_or(true)
                 {
                     sessions.push(session);
                 }
@@ -663,9 +665,14 @@ fn find_session_dir(remote_session_id: &str) -> Result<PathBuf, String> {
     if !root.is_dir() {
         return Err("本机没有 Grok 会话目录".into());
     }
-    for project in fs::read_dir(&root).map_err(|error| format!("无法读取会话目录：{error}"))? {
+    for project in fs::read_dir(&root).map_err(|error| format!("无法读取会话目录：{error}"))?
+    {
         let project = project.map_err(|error| format!("无法读取会话目录：{error}"))?;
-        if !project.file_type().map(|kind| kind.is_dir()).unwrap_or(false) {
+        if !project
+            .file_type()
+            .map(|kind| kind.is_dir())
+            .unwrap_or(false)
+        {
             continue;
         }
         let candidate = project.path().join(remote_session_id);
@@ -686,7 +693,8 @@ pub fn import_grok_transcript(remote_session_id: String) -> Result<Value, String
     if let Ok(dir) = find_session_dir(session_id) {
         let history_path = dir.join("chat_history.jsonl");
         if history_path.is_file() {
-            let metadata = fs::metadata(&history_path).map_err(|error| format!("无法读取会话文件：{error}"))?;
+            let metadata = fs::metadata(&history_path)
+                .map_err(|error| format!("无法读取会话文件：{error}"))?;
             if metadata.len() > MAX_HISTORY_BYTES {
                 return Err("会话记录过大".into());
             }
@@ -696,7 +704,8 @@ pub fn import_grok_transcript(remote_session_id: String) -> Result<Value, String
         }
         let updates_path = dir.join("updates.jsonl");
         if updates_path.is_file() {
-            let metadata = fs::metadata(&updates_path).map_err(|error| format!("无法读取会话更新：{error}"))?;
+            let metadata = fs::metadata(&updates_path)
+                .map_err(|error| format!("无法读取会话更新：{error}"))?;
             if metadata.len() > MAX_HISTORY_BYTES {
                 return Err("会话记录过大".into());
             }
@@ -753,10 +762,15 @@ mod tests {
         assert_eq!(items[0]["kind"], "user");
         assert_eq!(items[0]["text"], "直接发一句");
         assert!(items.iter().all(|item| {
-            !item["text"].as_str().unwrap_or("").contains("system-reminder")
+            !item["text"]
+                .as_str()
+                .unwrap_or("")
+                .contains("system-reminder")
         }));
-        assert!(items.iter().any(|item| item["kind"] == "assistant"
-            && item["text"].as_str().unwrap().contains("收到")));
+        assert!(items
+            .iter()
+            .any(|item| item["kind"] == "assistant"
+                && item["text"].as_str().unwrap().contains("收到")));
     }
 
     #[test]
@@ -835,7 +849,9 @@ Grok Desk 是桌面客户端。
 你能做这个管线吗
 "#;
         let items = parse_grok_export(markdown);
-        assert!(items.iter().any(|item| item["kind"] == "user" && item["text"] == "请你阅读我的项目"));
+        assert!(items
+            .iter()
+            .any(|item| item["kind"] == "user" && item["text"] == "请你阅读我的项目"));
         assert!(items.iter().any(|item| item["kind"] == "assistant"));
         assert!(items.iter().any(|item| item["kind"] == "tool"));
         assert_eq!(items.last().unwrap()["text"], "你能做这个管线吗");
@@ -852,7 +868,10 @@ Grok Desk 是桌面客户端。
         assert_eq!(items[0]["kind"], "user");
         assert_eq!(items[0]["text"], "帮我看一下登录闪退");
         assert_eq!(items[1]["kind"], "assistant");
-        assert!(items[1]["text"].as_str().unwrap().contains("我先读相关文件"));
+        assert!(items[1]["text"]
+            .as_str()
+            .unwrap()
+            .contains("我先读相关文件"));
         assert_eq!(items[2]["kind"], "tool");
     }
 

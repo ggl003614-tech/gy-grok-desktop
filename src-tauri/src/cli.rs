@@ -160,9 +160,9 @@ fn looks_like_device_code(value: &str) -> bool {
     let chars = value.chars().count();
     (6..=20).contains(&chars)
         && value.contains('-')
-        && value
-            .chars()
-            .all(|character| character.is_ascii_uppercase() || character.is_ascii_digit() || character == '-')
+        && value.chars().all(|character| {
+            character.is_ascii_uppercase() || character.is_ascii_digit() || character == '-'
+        })
 }
 
 async fn kill_login_process() {
@@ -179,7 +179,10 @@ async fn kill_login_process() {
     }
     #[cfg(not(windows))]
     {
-        let _ = Command::new("kill").args(["-TERM", &pid.to_string()]).status().await;
+        let _ = Command::new("kill")
+            .args(["-TERM", &pid.to_string()])
+            .status()
+            .await;
     }
 }
 
@@ -537,7 +540,7 @@ fn open_in_browser(url: &str) -> Result<(), String> {
         command
             .spawn()
             .map_err(|error| format!("无法打开浏览器：{error}"))?;
-        return Ok(());
+        Ok(())
     }
     #[cfg(not(windows))]
     {
@@ -569,10 +572,17 @@ pub async fn probe_account() -> Result<AccountProbe, String> {
     let mut stdout = BufReader::new(child.stdout.take().ok_or("无法连接 Grok 标准输出")?).lines();
 
     let result = timeout(Duration::from_secs(45), async {
-        rpc_exchange(&mut stdin, &mut stdout, 1, "initialize", serde_json::json!({
-            "protocolVersion": 1,
-            "clientCapabilities": {}
-        })).await
+        rpc_exchange(
+            &mut stdin,
+            &mut stdout,
+            1,
+            "initialize",
+            serde_json::json!({
+                "protocolVersion": 1,
+                "clientCapabilities": {}
+            }),
+        )
+        .await
     })
     .await;
     let initialize = match result {
@@ -583,7 +593,10 @@ pub async fn probe_account() -> Result<AccountProbe, String> {
         }
         Err(_) => {
             let _ = child.kill().await;
-            return Ok(unauthenticated_probe(grok_path, "探测 Grok 账户超时".into()));
+            return Ok(unauthenticated_probe(
+                grok_path,
+                "探测 Grok 账户超时".into(),
+            ));
         }
     };
 
@@ -592,9 +605,9 @@ pub async fn probe_account() -> Result<AccountProbe, String> {
         .and_then(|value| value.as_array())
         .cloned()
         .unwrap_or_default();
-    let has_cached = auth_methods.iter().any(|method| {
-        method.get("id").and_then(|value| value.as_str()) == Some("cached_token")
-    });
+    let has_cached = auth_methods
+        .iter()
+        .any(|method| method.get("id").and_then(|value| value.as_str()) == Some("cached_token"));
     if !has_cached {
         let _ = child.kill().await;
         return Ok(unauthenticated_probe(
@@ -624,10 +637,16 @@ pub async fn probe_account() -> Result<AccountProbe, String> {
         Err(_) => return Ok(unauthenticated_probe(grok_path, "认证探测超时".into())),
     };
 
-    let meta = auth.get("_meta").cloned().unwrap_or(serde_json::Value::Null);
+    let meta = auth
+        .get("_meta")
+        .cloned()
+        .unwrap_or(serde_json::Value::Null);
     Ok(AccountProbe {
         authenticated: true,
-        email: meta.get("email").and_then(|value| value.as_str()).map(str::to_owned),
+        email: meta
+            .get("email")
+            .and_then(|value| value.as_str())
+            .map(str::to_owned),
         subscription_tier: meta
             .get("subscription_tier")
             .and_then(|value| value.as_str())
@@ -750,9 +769,11 @@ async fn rpc_exchange(
             Ok(value) => value,
             Err(_) => continue,
         };
-        let response_id = value
-            .get("id")
-            .and_then(|entry| entry.as_u64().or_else(|| entry.as_i64().map(|number| number as u64)));
+        let response_id = value.get("id").and_then(|entry| {
+            entry
+                .as_u64()
+                .or_else(|| entry.as_i64().map(|number| number as u64))
+        });
         if response_id != Some(id) {
             continue;
         }
@@ -763,7 +784,10 @@ async fn rpc_exchange(
                 .unwrap_or("ACP 探测失败")
                 .to_string());
         }
-        return Ok(value.get("result").cloned().unwrap_or(serde_json::Value::Null));
+        return Ok(value
+            .get("result")
+            .cloned()
+            .unwrap_or(serde_json::Value::Null));
     }
 }
 

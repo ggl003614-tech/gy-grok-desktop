@@ -18,28 +18,29 @@ mod workspace;
 use agent::{
     agent_status, send_agent_message, start_agent, start_agent_advanced, stop_agent, AgentState,
 };
+use attachments::{import_attachments, import_data_url, import_folder};
+use billing::{fetch_account_credits, redeem_usage_reset};
 use bootstrap::ensure_runtime;
 use cli::{
     cancel_grok_login, check_grok, export_diagnostics, export_grok_session, logout_grok,
     open_external_url, open_preview_url, probe_account, run_cli_probe, start_grok_login,
 };
+use computer::take_screenshot;
+use computer_control::{computer_control_status, set_capture_detail, set_computer_control};
+use computer_mcp::run as run_computer_mcp_loop;
 use extensions::{import_skill, list_extensions, manage_mcp, open_skills_home};
-use history::{delete_grok_session, grok_session_usage, import_grok_transcript, list_grok_sessions};
+use history::{
+    delete_grok_session, grok_session_usage, import_grok_transcript, list_grok_sessions,
+};
 use store::{
     append_local_message, delete_local_session, get_settings, list_local_sessions, list_workspaces,
     load_local_messages, load_local_transcript, remove_workspace, save_local_transcript,
-    set_setting, upsert_local_session, upsert_workspace,
-    StoreState,
+    set_setting, upsert_local_session, upsert_workspace, StoreState,
 };
 use terminal::{
     list_grok_terminals, resize_grok_terminal, start_grok_terminal, stop_grok_terminal,
     write_grok_terminal, TerminalState,
 };
-use attachments::{import_attachments, import_data_url, import_folder};
-use billing::{fetch_account_credits, redeem_usage_reset};
-use computer::take_screenshot;
-use computer_control::{computer_control_status, set_capture_detail, set_computer_control};
-use computer_mcp::run as run_computer_mcp_loop;
 use workspace::{
     get_git_diff, get_git_status, list_workspace_directory, read_workspace_file,
     search_workspace_files,

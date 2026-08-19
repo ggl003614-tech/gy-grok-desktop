@@ -87,7 +87,7 @@ static LAST_SHOT: Mutex<Option<LastShot>> = Mutex::new(None);
 pub fn control_state_path() -> PathBuf {
     let base = std::env::var_os("APPDATA")
         .map(PathBuf::from)
-        .unwrap_or_else(|| std::env::temp_dir());
+        .unwrap_or_else(std::env::temp_dir);
     base.join("dev.grokdesk.desktop")
         .join("computer-control.json")
 }
@@ -173,7 +173,12 @@ pub fn capture_dir() -> PathBuf {
 }
 
 pub fn scale_rgba(width: u32, height: u32, rgba: &[u8], max_width: u32) -> (u32, u32, Vec<u8>) {
-    if width == 0 || height == 0 || rgba.len() < (width as usize).saturating_mul(height as usize).saturating_mul(4)
+    if width == 0
+        || height == 0
+        || rgba.len()
+            < (width as usize)
+                .saturating_mul(height as usize)
+                .saturating_mul(4)
     {
         return (width, height, rgba.to_vec());
     }

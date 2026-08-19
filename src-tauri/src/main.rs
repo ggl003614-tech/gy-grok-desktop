@@ -8,7 +8,10 @@ fn main() {
         let _ = std::fs::write(&path, &body);
         eprintln!("Grok Desk panic: {info}");
     }));
-    if std::env::args().skip(1).any(|arg| arg == grok_desk_lib::COMPUTER_MCP_FLAG) {
+    if std::env::args()
+        .skip(1)
+        .any(|arg| arg == grok_desk_lib::COMPUTER_MCP_FLAG)
+    {
         grok_desk_lib::run_computer_mcp();
         return;
     }

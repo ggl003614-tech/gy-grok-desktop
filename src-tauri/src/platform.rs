@@ -32,10 +32,7 @@ pub fn grok_executable() -> Result<PathBuf, String> {
         if path.is_file() {
             return Ok(path);
         }
-        return Err(format!(
-            "GROK_BIN 指向的文件不存在：{}",
-            path.display()
-        ));
+        return Err(format!("GROK_BIN 指向的文件不存在：{}", path.display()));
     }
 
     let home = std::env::var_os("USERPROFILE")
@@ -110,9 +107,15 @@ pub fn system_proxy_from_registry() -> Option<String> {
 /// 进程启动早期调用一次：把系统代理写进本进程的环境变量。
 /// 之后 spawn 的所有子进程（grok agent、CLI 探针、登录）都会继承。
 pub fn adopt_system_proxy() {
-    let already_set = ["HTTPS_PROXY", "https_proxy", "HTTP_PROXY", "http_proxy", "ALL_PROXY"]
-        .iter()
-        .any(|name| std::env::var_os(name).is_some_and(|value| !value.is_empty()));
+    let already_set = [
+        "HTTPS_PROXY",
+        "https_proxy",
+        "HTTP_PROXY",
+        "http_proxy",
+        "ALL_PROXY",
+    ]
+    .iter()
+    .any(|name| std::env::var_os(name).is_some_and(|value| !value.is_empty()));
     if already_set {
         return;
     }
@@ -160,9 +163,9 @@ pub fn is_safe_xai_https_url(url: &str) -> bool {
         "https://grok.com/",
         "https://www.grok.com/",
     ];
-    PREFIXES.iter().any(|prefix| {
-        url == prefix.trim_end_matches('/') || url.starts_with(prefix)
-    })
+    PREFIXES
+        .iter()
+        .any(|prefix| url == prefix.trim_end_matches('/') || url.starts_with(prefix))
 }
 
 pub fn is_safe_preview_url(url: &str) -> bool {
@@ -170,13 +173,18 @@ pub fn is_safe_preview_url(url: &str) -> bool {
     if url.len() >= 512 || url.contains([' ', '\n', '\r', '\t', '"', '\'', '<', '>', '\\']) {
         return false;
     }
-    ["http://localhost", "https://localhost", "http://127.0.0.1", "https://127.0.0.1"]
-        .iter()
-        .any(|prefix| {
-            url == *prefix
-                || url.starts_with(&format!("{prefix}/"))
-                || url.starts_with(&format!("{prefix}:"))
-        })
+    [
+        "http://localhost",
+        "https://localhost",
+        "http://127.0.0.1",
+        "https://127.0.0.1",
+    ]
+    .iter()
+    .any(|prefix| {
+        url == *prefix
+            || url.starts_with(&format!("{prefix}/"))
+            || url.starts_with(&format!("{prefix}:"))
+    })
 }
 
 #[cfg(test)]

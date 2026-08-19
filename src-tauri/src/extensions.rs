@@ -4,7 +4,10 @@ use std::{
     fs,
     path::{Path, PathBuf},
 };
-use tokio::{process::Command, time::{timeout, Duration}};
+use tokio::{
+    process::Command,
+    time::{timeout, Duration},
+};
 
 const MAX_SKILL_FILES: usize = 200;
 const MAX_SKILL_BYTES: u64 = 8 * 1024 * 1024;
@@ -66,19 +69,15 @@ pub struct CommandResult {
 
 pub fn validate_mcp_name(name: &str) -> Result<&str, String> {
     let name = name.trim();
-    if name.len() < 1 || name.len() > 64 {
+    if name.is_empty() || name.len() > 64 {
         return Err("MCP 名称长度需要在 1 到 64 个字符之间".into());
     }
-    if !name
-        .chars()
-        .enumerate()
-        .all(|(index, character)| {
-            character.is_ascii_alphanumeric()
-                || character == '_'
-                || character == '-'
-                || (index > 0 && character == '.')
-        })
-    {
+    if !name.chars().enumerate().all(|(index, character)| {
+        character.is_ascii_alphanumeric()
+            || character == '_'
+            || character == '-'
+            || (index > 0 && character == '.')
+    }) {
         return Err("MCP 名称只能使用字母、数字、连字符和下划线".into());
     }
     Ok(name)
@@ -91,7 +90,9 @@ pub fn validate_mcp_target(transport: &str, value: &str) -> Result<String, Strin
     }
     match transport {
         "http" | "sse" => {
-            if !(value.starts_with("https://") || value.starts_with("http://127.0.0.1") || value.starts_with("http://localhost"))
+            if !(value.starts_with("https://")
+                || value.starts_with("http://127.0.0.1")
+                || value.starts_with("http://localhost"))
             {
                 return Err("远程 MCP 只允许 https，或本机 http://127.0.0.1 / localhost".into());
             }
@@ -101,7 +102,10 @@ pub fn validate_mcp_target(transport: &str, value: &str) -> Result<String, Strin
             Ok(value.to_string())
         }
         "stdio" => {
-            if value.chars().any(|character| "<>|&;`$\n\r".contains(character)) {
+            if value
+                .chars()
+                .any(|character| "<>|&;`$\n\r".contains(character))
+            {
                 return Err("MCP 命令包含不支持的字符".into());
             }
             Ok(value.to_string())
@@ -113,7 +117,9 @@ pub fn validate_mcp_target(transport: &str, value: &str) -> Result<String, Strin
 pub fn sanitize_skill_name(value: &str) -> Result<String, String> {
     let value = value
         .trim()
-        .trim_matches(|character: char| !character.is_ascii_alphanumeric() && character != '-' && character != '_')
+        .trim_matches(|character: char| {
+            !character.is_ascii_alphanumeric() && character != '-' && character != '_'
+        })
         .to_ascii_lowercase()
         .chars()
         .map(|character| {
@@ -162,7 +168,10 @@ pub fn parse_extension_snapshot(value: &serde_json::Value) -> ExtensionSnapshot 
             if name.is_empty() {
                 return None;
             }
-            let source = entry.get("source").cloned().unwrap_or(serde_json::Value::Null);
+            let source = entry
+                .get("source")
+                .cloned()
+                .unwrap_or(serde_json::Value::Null);
             let source_type = source
                 .get("type")
                 .and_then(|item| item.as_str())
@@ -214,7 +223,10 @@ pub fn parse_extension_snapshot(value: &serde_json::Value) -> ExtensionSnapshot 
             if name.is_empty() {
                 return None;
             }
-            let source = entry.get("source").cloned().unwrap_or(serde_json::Value::Null);
+            let source = entry
+                .get("source")
+                .cloned()
+                .unwrap_or(serde_json::Value::Null);
             Some(SkillInfo {
                 name: name.to_string(),
                 description: entry
@@ -270,10 +282,8 @@ fn build_mcp_args(request: &McpManageRequest) -> Result<Vec<String>, String> {
                 .unwrap_or("stdio")
                 .trim()
                 .to_ascii_lowercase();
-            let target = validate_mcp_target(
-                &transport,
-                request.command_or_url.as_deref().unwrap_or(""),
-            )?;
+            let target =
+                validate_mcp_target(&transport, request.command_or_url.as_deref().unwrap_or(""))?;
             let scope = match request.scope.as_deref().unwrap_or("user") {
                 "project" => "project",
                 "user" => "user",
@@ -327,13 +337,21 @@ async fn run_grok(args: Vec<String>, cwd: Option<PathBuf>) -> Result<CommandResu
 
 #[tauri::command]
 pub async fn list_extensions(cwd: Option<String>) -> Result<ExtensionSnapshot, String> {
-    let cwd = match cwd.as_deref().map(str::trim).filter(|value| !value.is_empty()) {
+    let cwd = match cwd
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    {
         Some(value) => Some(canonical_directory(value)?),
         None => None,
     };
     let result = run_grok(vec!["inspect".into(), "--json".into()], cwd).await?;
     if !result.success {
-        return Err(result.stderr.trim().to_string().if_empty("无法读取 Grok 扩展"));
+        return Err(result
+            .stderr
+            .trim()
+            .to_string()
+            .if_empty("无法读取 Grok 扩展"));
     }
     let value: serde_json::Value = serde_json::from_str(result.stdout.trim())
         .map_err(|error| format!("无法解析 grok inspect：{error}"))?;
@@ -366,16 +384,15 @@ pub async fn import_skill(source_dir: String) -> Result<SkillInfo, String> {
     if !skill_file.is_file() {
         return Err("所选文件夹里没有 SKILL.md".into());
     }
-    let markdown = fs::read_to_string(&skill_file)
-        .map_err(|error| format!("无法读取 SKILL.md：{error}"))?;
-    let raw_name = skill_name_from_markdown(&markdown)
-        .unwrap_or_else(|| {
-            source
-                .file_name()
-                .and_then(|name| name.to_str())
-                .unwrap_or("skill")
-                .to_string()
-        });
+    let markdown =
+        fs::read_to_string(&skill_file).map_err(|error| format!("无法读取 SKILL.md：{error}"))?;
+    let raw_name = skill_name_from_markdown(&markdown).unwrap_or_else(|| {
+        source
+            .file_name()
+            .and_then(|name| name.to_str())
+            .unwrap_or("skill")
+            .to_string()
+    });
     let name = sanitize_skill_name(&raw_name)?;
     let home = skills_home()?;
     fs::create_dir_all(&home).map_err(|error| format!("无法创建技能目录：{error}"))?;
@@ -386,7 +403,9 @@ pub async fn import_skill(source_dir: String) -> Result<SkillInfo, String> {
     copy_skill_dir(&source, &destination)?;
     Ok(SkillInfo {
         name,
-        description: markdown.lines().find(|line| !line.starts_with('-') && !line.is_empty() && !line.starts_with('#'))
+        description: markdown
+            .lines()
+            .find(|line| !line.starts_with('-') && !line.is_empty() && !line.starts_with('#'))
             .unwrap_or_default()
             .to_string(),
         path: destination.join("SKILL.md").to_string_lossy().into_owned(),
@@ -415,8 +434,10 @@ fn copy_skill_walk(
     files: &mut usize,
     bytes: &mut u64,
 ) -> Result<(), String> {
-    fs::create_dir_all(destination).map_err(|error| format!("无法创建 {destination:?}：{error}"))?;
-    for entry in fs::read_dir(source).map_err(|error| format!("无法读取技能目录：{error}"))? {
+    fs::create_dir_all(destination)
+        .map_err(|error| format!("无法创建 {destination:?}：{error}"))?;
+    for entry in fs::read_dir(source).map_err(|error| format!("无法读取技能目录：{error}"))?
+    {
         let entry = entry.map_err(|error| format!("无法读取技能文件：{error}"))?;
         let name = entry.file_name();
         let name_text = name.to_string_lossy();
@@ -461,7 +482,7 @@ fn open_directory(path: &Path) -> Result<(), String> {
             .arg(path)
             .spawn()
             .map_err(|error| format!("无法打开文件夹：{error}"))?;
-        return Ok(());
+        Ok(())
     }
     #[cfg(not(windows))]
     {

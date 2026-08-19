@@ -133,8 +133,8 @@ fn download_file(app: &AppHandle, url: &str, dest: &Path) -> Result<(), String> 
         file.write_all(&buffer[..read])
             .map_err(|error| format!("写入下载失败：{error}"))?;
         copied += read as u64;
-        if total > 0 {
-            let percent = ((copied.saturating_mul(100)) / total).min(99) as u8;
+        if let Some(ratio) = copied.saturating_mul(100).checked_div(total) {
+            let percent = ratio.min(99) as u8;
             if percent != last_percent {
                 emit(
                     app,
@@ -165,7 +165,8 @@ fn replace_file(source: &Path, dest: &Path) -> Result<(), String> {
             let old = dest.with_extension("exe.old");
             let _ = fs::remove_file(&old);
             if dest.exists() {
-                fs::rename(dest, &old).map_err(|error| format!("无法替换已占用的 Grok：{error}"))?;
+                fs::rename(dest, &old)
+                    .map_err(|error| format!("无法替换已占用的 Grok：{error}"))?;
             }
             fs::copy(source, dest).map_err(|error| format!("无法安装 Grok：{error}"))?;
             Ok(())
@@ -184,9 +185,7 @@ fn install_official_cli(app: &AppHandle) -> Result<PathBuf, String> {
         Some(8),
     );
     let home = grok_home()?;
-    let download = home
-        .join("downloads")
-        .join(format!("grok-{platform}.exe"));
+    let download = home.join("downloads").join(format!("grok-{platform}.exe"));
     let mut last_error = "下载失败".to_string();
     let mut downloaded = false;
     for suffix in [".exe", ""] {

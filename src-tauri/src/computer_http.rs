@@ -24,12 +24,10 @@ pub fn start() {
                 }
             };
             let _ = listener.set_nonblocking(false);
-            for incoming in listener.incoming() {
-                if let Ok(stream) = incoming {
-                    thread::spawn(move || {
-                        let _ = handle_connection(stream);
-                    });
-                }
+            for stream in listener.incoming().flatten() {
+                thread::spawn(move || {
+                    let _ = handle_connection(stream);
+                });
             }
         })
         .ok();
@@ -243,7 +241,9 @@ mod tests {
         };
         let (status, headers, body) = respond(&request);
         assert_eq!(status, 200);
-        assert!(headers.iter().any(|(name, value)| name == "Mcp-Session-Id" && value == "desk-local"));
+        assert!(headers
+            .iter()
+            .any(|(name, value)| name == "Mcp-Session-Id" && value == "desk-local"));
         let parsed: Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(parsed["result"]["serverInfo"]["name"], "desk-computer");
     }
