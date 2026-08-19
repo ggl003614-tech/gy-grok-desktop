@@ -59,6 +59,71 @@ pub fn grok_executable() -> Result<PathBuf, String> {
     }))
 }
 
+/// 双击启动的 GUI 进程环境里没有 HTTPS_PROXY，而 Grok CLI（reqwest）只认
+/// 环境变量、不读 Windows 系统代理。Clash 这类工具开「系统代理」模式时，
+/// CLI 的流量就会绕开代理直连 —— x.ai 直连不通，登录和对话全部卡死，
+/// 界面上看起来就是「一直在准备」。
+///
+/// 这里把系统代理（WinINET 注册表）翻译成环境变量。只在用户没自己设过时注入，
+/// 命令行里显式给的值永远优先。
+#[cfg(windows)]
+pub fn system_proxy_from_registry() -> Option<String> {
+    use std::process::Command as StdCommand;
+    // reg.exe 而不是引一个注册表 crate：只读两个值，犯不上加依赖。
+    let query = |name: &str| -> Option<String> {
+        let output = StdCommand::new("reg")
+            .args([
+                "query",
+                r"HKCU\Software\Microsoft\Windows\CurrentVersion\Internet Settings",
+                "/v",
+                name,
+            ])
+            .output()
+            .ok()?;
+        let text = String::from_utf8_lossy(&output.stdout).into_owned();
+        text.lines()
+            .find(|line| line.contains(name))
+            .and_then(|line| line.split_whitespace().last())
+            .map(str::to_owned)
+    };
+    let enabled = query("ProxyEnable")?;
+    if !enabled.ends_with('1') {
+        return None;
+    }
+    let server = query("ProxyServer")?;
+    if server.is_empty() || server.contains(';') {
+        // “http=…;https=…” 的分协议写法很少见，先不处理，避免注错。
+        return None;
+    }
+    Some(if server.starts_with("http") {
+        server
+    } else {
+        format!("http://{server}")
+    })
+}
+
+#[cfg(not(windows))]
+pub fn system_proxy_from_registry() -> Option<String> {
+    None
+}
+
+/// 进程启动早期调用一次：把系统代理写进本进程的环境变量。
+/// 之后 spawn 的所有子进程（grok agent、CLI 探针、登录）都会继承。
+pub fn adopt_system_proxy() {
+    let already_set = ["HTTPS_PROXY", "https_proxy", "HTTP_PROXY", "http_proxy", "ALL_PROXY"]
+        .iter()
+        .any(|name| std::env::var_os(name).is_some_and(|value| !value.is_empty()));
+    if already_set {
+        return;
+    }
+    if let Some(proxy) = system_proxy_from_registry() {
+        std::env::set_var("HTTPS_PROXY", &proxy);
+        std::env::set_var("HTTP_PROXY", &proxy);
+        // 本机回环别走代理：内置电脑控制和预览面板都在 127.0.0.1 上。
+        std::env::set_var("NO_PROXY", "localhost,127.0.0.1,::1");
+    }
+}
+
 pub fn configure_tokio_command(command: &mut tokio::process::Command) {
     if std::env::var_os("HOME").is_none() {
         if let Some(profile) = std::env::var_os("USERPROFILE") {

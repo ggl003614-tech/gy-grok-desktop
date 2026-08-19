@@ -54,6 +54,9 @@ pub fn run_computer_mcp() {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // 要在任何子进程 spawn 之前做：Clash 这类代理开「系统代理」模式时，
+    // 双击启动的进程没有代理环境变量，Grok CLI 会直连被墙，卡死在准备页。
+    platform::adopt_system_proxy();
     tauri::Builder::default()
         .manage(AgentState::default())
         .manage(TerminalState::default())
