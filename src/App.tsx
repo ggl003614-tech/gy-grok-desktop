@@ -80,6 +80,7 @@ import {
   updateTarget,
   type ThreadSnapshot,
 } from "./threadRuntime";
+import { isPersistJobValid, schedulePersist } from "./transcriptPersist";
 import {
   lookupForConnect,
   projectPathKey,
@@ -956,13 +957,20 @@ function App() {
   }, [spend, connectionInfo?.sessionId, localSessionId]);
 
   const persistTranscript = useCallback(
-    async (sessionId = localSessionIdRef.current) => {
+    async (
+      sessionId = localSessionIdRef.current,
+      // 内容显式传进来时用传进来的。不传才退回读 ref —— 那条路只有「离开前
+      // 保存当前线程」在用，那一刻 items 和 sessionId 本来就是同一个线程的。
+      explicitItems?: readonly TimelineItem[],
+    ) => {
       if (!sessionId || !saveHistory) return;
-      const items = serializeTimeline(itemsRef.current);
+      const items = serializeTimeline(explicitItems ? [...explicitItems] : itemsRef.current);
       if (!items.length) return;
       try {
         await invoke("save_local_transcript", { sessionId, items });
-        if (workspaceId) {
+        // 标题和 remoteSessionId 是线程的身份信息。人已经切走的话，
+        // 这里再写就会把旧线程的记录指到新线程的远端会话上，那条线程从此打不开。
+        if (workspaceId && sessionId === localSessionIdRef.current) {
           const title = titleFromTranscript(items);
           if (title) {
             await invoke("upsert_local_session", {
@@ -1049,8 +1057,12 @@ function App() {
     itemsRef.current = items;
     if (localSessionId && saveHistory && items.length) {
       window.clearTimeout(persistTimer.current);
+      // 内容在排定这一刻就取走。以前是等 400ms 后再读 itemsRef，
+      // 那时候时间线可能已经换成另一个线程的了。
+      const job = schedulePersist(localSessionId, items);
       persistTimer.current = window.setTimeout(() => {
-        void persistTranscript(localSessionId);
+        if (!job || !isPersistJobValid(job, localSessionIdRef.current)) return;
+        void persistTranscript(job.sessionId, job.items);
       }, 400);
     }
     for (const item of items) {
@@ -1847,6 +1859,12 @@ function App() {
     const known = existing.find((entry) => entry.remoteSessionId === session.sessionId);
     const restored = await fetchTranscript(known?.id, session.sessionId);
     if (gen !== threadSwitchGen.current) return;
+    // 这一行必须紧挨着 setItems。以前 localSessionId 要等 loadSession 和
+    // upsert_local_session 两次往返之后才更新，中间那段时间「时间线是新线程的、
+    // 存档 id 还是旧线程的」，自动保存一响就把新线程的对话覆盖到旧线程头上。
+    // 还没有本地记录时先置空，宁可这一小段不存，也不能存错。
+    localSessionIdRef.current = known?.id ?? "";
+    setLocalSessionId(known?.id ?? "");
     setItems(restored);
     if (restored.length) setThreadRestoring(false);
     setUsage({});
