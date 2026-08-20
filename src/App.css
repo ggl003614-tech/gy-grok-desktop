@@ -418,7 +418,14 @@ button:disabled { cursor: default; opacity: .45; }
   margin-top: 7px;
   color: var(--faint); font-size: 11px;
 }
+/* 提示跟状态之间加一道竖线。都是小号灰字，只靠 gap 分不开 ——
+   实机截图里「上下文 35% Enter 发送」糊成了一句话。 */
 .composer-status .hint { color: var(--faint); }
+.composer-status .stat + .hint,
+.composer-status .stat + .stat {
+  padding-left: 10px;
+  border-left: 1px solid var(--line);
+}
 .composer-status .stat {
   display: inline-flex; align-items: center; gap: 4px;
   flex: none; white-space: nowrap;
