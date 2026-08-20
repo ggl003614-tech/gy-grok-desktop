@@ -393,16 +393,59 @@ button:disabled { cursor: default; opacity: .45; }
   bottom: auto;
   grid-area: composer;
 }
-.composer { position: relative; width: min(760px, 100%); margin: 0 auto; border: 1px solid var(--line); border-radius: 16px; background: var(--panel-2); box-shadow: var(--shadow); }
-.composer:focus-within { border-color: var(--text-2); }
+.composer {
+  position: relative; width: min(760px, 100%); margin: 0 auto;
+  border: 1px solid var(--line); border-radius: 20px;
+  background: var(--panel-2); box-shadow: var(--shadow);
+  transition: border-color .15s ease, box-shadow .15s ease;
+}
+/* 聚焦：边框只加深一点点，外面套一圈极淡的环。
+   原来是把边框拉到近黑色（--text-2），整个框会「跳」一下，太重。 */
+.composer:focus-within {
+  border-color: var(--focus-line);
+  box-shadow: var(--shadow), 0 0 0 3px var(--focus-ring);
+}
 .composer textarea { display: block; width: 100%; min-height: 58px; max-height: 180px; resize: none; border: 0; outline: 0; padding: 15px 16px 4px; background: transparent; color: var(--text); font-size: 14px; line-height: 1.55; }
 .composer textarea::placeholder { color: var(--faint); }
 .composer-bottom { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-width: 0; padding: 5px 7px 7px 13px; }
 .model-controls { display: flex; align-items: center; flex-wrap: nowrap; gap: 6px; min-width: 0; overflow: hidden; }
 .model-controls label { display: flex; align-items: center; gap: 5px; min-width: 0; color: var(--muted); }
-.model-controls select { max-width: 160px; border: 0; outline: none; padding: 3px 18px 3px 3px; background: transparent; color: var(--muted); font-size: 12px; cursor: pointer; }
-.model-controls select:hover { color: var(--text); }
-.model-controls select:disabled { cursor: default; opacity: .6; }
+/* 自定义下拉。原生 select 的弹出层是系统画的 —— Windows 上是深灰底、
+   黑色高亮的方角菜单，CSS 改不动，跟界面其它部分完全不搭。 */
+.quiet-select { position: relative; flex: none; }
+.quiet-trigger {
+  display: inline-flex; align-items: center; gap: 5px;
+  max-width: 190px; padding: 4px 6px 4px 7px;
+  border: 1px solid transparent; border-radius: 8px;
+  color: var(--muted); background: transparent;
+  font-size: 12px; cursor: pointer;
+}
+.quiet-trigger > span {
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.quiet-trigger .chev { flex: none; opacity: .6; }
+.quiet-trigger:hover:not(:disabled),
+.quiet-trigger.open { color: var(--text); background: var(--inset); }
+.quiet-trigger:disabled { opacity: .5; cursor: default; }
+
+.quiet-menu {
+  position: absolute; bottom: calc(100% + 6px); left: 0; z-index: 40;
+  min-width: 190px; max-width: 300px; max-height: 320px; overflow-y: auto;
+  padding: 5px; border: 1px solid var(--line); border-radius: 12px;
+  background: var(--panel-2); box-shadow: var(--shadow);
+}
+.quiet-item {
+  display: flex; align-items: flex-start; gap: 6px; width: 100%;
+  padding: 7px 8px; border-radius: 8px;
+  color: var(--text); background: transparent; text-align: left;
+}
+.quiet-item .tick { display: grid; place-items: center; width: 14px; padding-top: 1px; flex: none; color: var(--muted); }
+.quiet-item .body { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.quiet-item strong { font-size: 12.5px; font-weight: 500; }
+.quiet-item small { color: var(--faint); font-size: 11px; }
+/* 高亮跟着键盘和鼠标走，用浅底而不是系统那种黑底反白。 */
+.quiet-item.active { background: var(--inset); }
+.quiet-item.on strong { font-weight: 600; }
 .send-button, .stop-button { width: 31px; height: 31px; display: grid; place-items: center; border-radius: 7px; }
 .send-button { background: var(--text); color: var(--on-accent); }
 .send-button:hover { background: var(--send-hover); color: var(--on-accent); }

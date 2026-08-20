@@ -83,6 +83,7 @@ import {
 } from "./threadRuntime";
 import { isPersistJobValid, schedulePersist } from "./transcriptPersist";
 import { GOAL_NUDGE, decideGoalContinue, parseGoalCommand } from "./goalRunner";
+import { QuietSelect } from "./QuietSelect";
 import {
   lookupForConnect,
   projectPathKey,
@@ -3173,36 +3174,29 @@ function App() {
                       onCheck={runCheck}
                       onOpenExtensions={() => setWorkspacePage("extensions")}
                     />
-                    <label>
-                      <Sparkles size={14} />
-                      <select
-                        aria-label={t("composer.model")}
-                        value={selectedModel}
-                        disabled={busy || !connectionInfo?.models.length}
-                        onChange={(event) => void switchModel(event.target.value)}
-                      >
-                        {(connectionInfo?.models ?? []).map((model) => (
-                          <option key={model.modelId} value={model.modelId}>
-                            {model.name}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                    <label className="quiet-select" title={t("composer.permission")}>
-                      <ShieldAlert size={14} />
-                      <select
-                        aria-label={t("composer.permission")}
-                        value={permissionMode}
-                        disabled={busy}
-                        onChange={(event) => void applyPermissionMode(event.target.value as PermissionModeId)}
-                      >
-                        {PERMISSION_MODES.map((mode) => (
-                          <option key={mode.id} value={mode.id}>
-                            {t(`perm.${mode.id}.label`)}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
+                    <QuietSelect
+                      ariaLabel={t("composer.model")}
+                      icon={<Sparkles size={14} />}
+                      value={selectedModel}
+                      disabled={busy || !connectionInfo?.models.length}
+                      options={(connectionInfo?.models ?? []).map((model) => ({
+                        value: model.modelId,
+                        label: model.name,
+                      }))}
+                      onChange={(next) => void switchModel(next)}
+                    />
+                    <QuietSelect
+                      ariaLabel={t("composer.permission")}
+                      title={t("composer.permission")}
+                      icon={<ShieldAlert size={14} />}
+                      value={permissionMode}
+                      disabled={busy}
+                      options={PERMISSION_MODES.map((mode) => ({
+                        value: mode.id,
+                        label: t(`perm.${mode.id}.label`),
+                      }))}
+                      onChange={(next) => void applyPermissionMode(next as PermissionModeId)}
+                    />
                     <button
                       type="button"
                       className={`icon-toggle${computerControl ? " on" : ""}`}

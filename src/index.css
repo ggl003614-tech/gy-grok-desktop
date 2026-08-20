@@ -26,6 +26,9 @@
   --link: #185ea5;
   --folder: #9a6700;
   --shadow: 0 10px 28px rgba(24, 24, 22, .08);
+  /* 聚焦时的边框和外环。刻意做得很淡 —— 聚焦是状态提示，不该抢注意力。 */
+  --focus-line: #c9c9c0;
+  --focus-ring: rgba(24, 24, 22, .05);
   --shadow-lg: 0 22px 64px rgba(24, 24, 22, .14);
   --backdrop: rgba(24, 24, 22, .28);
   --code-bg: #f3f3ee;
@@ -79,6 +82,8 @@
   --link: #8eb6ea;
   --folder: #d6b66e;
   --shadow: 0 12px 40px rgba(0, 0, 0, .42);
+  --focus-line: #4a4a46;
+  --focus-ring: rgba(255, 255, 255, .06);
   --shadow-lg: 0 28px 90px rgba(0, 0, 0, .55);
   --backdrop: rgba(4, 5, 5, .68);
   --code-bg: #0b0d0e;
@@ -169,6 +174,9 @@
   -moz-osx-font-smoothing: grayscale;
   /* 数字等宽，状态栏那些计数不会随数值跳动 */
   font-variant-numeric: tabular-nums;
+  /* 汉字之间松一点。中文字面是满格的，按拉丁的默认字距排会显得挤；
+     0.01em 在 12-15px 这个区间足够，再大就散了。 */
+  letter-spacing: .01em;
 }
 
 * { box-sizing: border-box; }

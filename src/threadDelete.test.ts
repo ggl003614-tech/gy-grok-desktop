@@ -36,13 +36,12 @@ describe("thread deletion surface", () => {
     expect(sidebar).toMatch(/tree-delete-btn/);
     expect(sidebar).toMatch(/confirmingId/);
     expect(sidebar).toMatch(/onDeleteThread/);
-    // Esc 能取消确认
     expect(sidebar).toMatch(/setConfirmingId\(""\)/);
   });
 
   it("中英文文案都在", () => {
     for (const key of ["sidebar.delete", "sidebar.deleteConfirm", "sidebar.deleted"]) {
-      expect(i18n.split(`"${key}"`).length - 1).toBe(2);
+      expect(i18n.split('"' + key + '"').length - 1).toBe(2);
     }
   });
 
@@ -56,13 +55,20 @@ describe("界面细节修复（回归防线）", () => {
   const app = readFileSync(join(root, "App.tsx"), "utf8");
   const settings = readFileSync(join(root, "SettingsPanel.tsx"), "utf8");
   const i18n = readFileSync(join(root, "i18n.ts"), "utf8");
+  const css = readFileSync(join(root, "App.css"), "utf8");
+  const index = readFileSync(join(root, "index.css"), "utf8");
 
   it("路径占位符不带双反斜杠", () => {
-    // JSX 属性里的字符串不处理转义，写成 "C:\path" 会原样显示两道斜杠。
-    // 这里用字符串比较而不是正则 —— 正则里 \p、	 会被当成转义序列。
-    const doubled = "placeholder=" + '"' + "C:" + "\\".repeat(2) + "path";
-    expect(app.includes(doubled)).toBe(false);
-    expect(app.includes("String.raw`C:" + "\\" + "path" + "\\" + "to" + "\\" + "project`")).toBe(true);
+    // JSX 属性里的字符串不处理转义，写成 "C:\\path" 会原样显示两道斜杠。
+    // 用字符串比较而不是正则 —— 正则里 \p、\t 会被当成转义序列。
+    const backslash = String.fromCharCode(92);
+    const quote = String.fromCharCode(34);
+    expect(app.includes("placeholder=" + quote + "C:" + backslash + backslash + "path")).toBe(false);
+    expect(
+      app.includes(
+        "String.raw`C:" + backslash + "path" + backslash + "to" + backslash + "project`",
+      ),
+    ).toBe(true);
   });
 
   it("装不上时不再把同一句话说三遍", () => {
@@ -76,12 +82,27 @@ describe("界面细节修复（回归防线）", () => {
   it("检查更新接了后端命令，并且不跟 Grok CLI 的更新混淆", () => {
     expect(settings).toMatch(/invoke<UpdateCheck>\("check_app_update"\)/);
     for (const key of ["settings.checkUpdate", "settings.updateLatest", "settings.updateFound"]) {
-      expect(i18n.split(`"${key}"`).length - 1).toBe(2);
+      expect(i18n.split('"' + key + '"').length - 1).toBe(2);
     }
   });
 
   it("模型和目标用了各自的图标，不再共用 Sparkles", () => {
-    expect(app).toMatch(/<Sparkles size=\{14\} \/>\s*\n\s*<select/);
+    // 模型下拉换成了自定义的 QuietSelect，图标当 prop 传进去
+    expect(app).toMatch(/icon=\{<Sparkles size=\{14\} \/>\}/);
     expect(app).toMatch(/<Target size=\{12\} \/>/);
+  });
+
+  it("输入栏不再用原生 select —— 系统弹层跟界面不是一套东西", () => {
+    const composer = app.slice(app.indexOf('className="composer-bottom"'), app.indexOf("send-button"));
+    expect(composer).not.toMatch(/<select/);
+    expect(composer).toMatch(/<QuietSelect/);
+  });
+
+  it("聚焦时靠淡环表示，不把边框拉到近黑色", () => {
+    expect(css).toMatch(/--focus-ring/);
+    expect(css).not.toMatch(/\.composer:focus-within \{ border-color: var\(--text-2\); \}/);
+    // 亮色和暗色两套都要有，否则一套下面变量是空的
+    expect(index.split("--focus-line").length - 1).toBeGreaterThanOrEqual(2);
+    expect(index.split("--focus-ring").length - 1).toBeGreaterThanOrEqual(2);
   });
 });
