@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { UsagePanel } from "./UsagePanel";
 import { invoke } from "@tauri-apps/api/core";
 import { save } from "@tauri-apps/plugin-dialog";
 import {
@@ -183,6 +184,10 @@ export function SettingsPanel({
       </header>
 
       <div className="settings-content">
+        <section className="settings-section">
+          <UsagePanel />
+        </section>
+
         <section className="settings-section">
           <LifeModeTitle />
           <LifeModeSettings

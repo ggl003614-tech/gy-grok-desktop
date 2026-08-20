@@ -408,6 +408,41 @@ button:disabled { cursor: default; opacity: .45; }
 .send-button:hover { background: var(--send-hover); color: var(--on-accent); }
 .stop-button { background: var(--stop-bg); color: var(--stop-fg); }
 .composer-hint { display: block; margin-top: 7px; text-align: center; color: var(--faint); font-size: 11px; }
+
+/* 输入框底下这行：状态信息 + 操作提示。
+   以前这些都挤在控件栏里，最多能同时出现 10 个东西，胶囊挤到换行。
+   状态是信息不是按钮，不该跟模型选择抢那一行。 */
+.composer-status {
+  display: flex; align-items: center; justify-content: center;
+  flex-wrap: wrap; gap: 6px 10px;
+  margin-top: 7px;
+  color: var(--faint); font-size: 11px;
+}
+.composer-status .hint { color: var(--faint); }
+.composer-status .stat {
+  display: inline-flex; align-items: center; gap: 4px;
+  flex: none; white-space: nowrap;
+  color: var(--muted);
+}
+.composer-status .stat em { font-style: normal; opacity: .75; }
+.composer-status .stat em.tight { color: var(--warn, #d97757); opacity: 1; }
+.composer-status .stat.action { cursor: pointer; }
+.composer-status .stat.action:hover { color: var(--text); }
+.composer-status .stat.action.warn { color: var(--warn, #d97757); }
+.composer-status .stat.action:disabled { cursor: default; opacity: .5; }
+
+/* 控件栏里的图标开关（控制电脑）。开着时用主题色，不再占一整个词的宽度。 */
+.icon-toggle {
+  display: grid; place-items: center;
+  width: 28px; height: 28px; flex: none;
+  border: 1px solid transparent; border-radius: 7px;
+  color: var(--muted); background: transparent;
+}
+.icon-toggle:hover:not(:disabled) { color: var(--text); background: var(--inset); }
+.icon-toggle.on { color: var(--accent, #d97757); border-color: var(--accent, #d97757); }
+.icon-toggle:disabled { opacity: .45; cursor: default; }
+.quiet-select { flex: none; }
+
 .attach-list { display: flex; flex-wrap: wrap; gap: 6px; padding: 8px 10px 0; }
 .attach-chip { display: inline-flex; align-items: center; gap: 6px; max-width: 180px; padding: 3px 6px 3px 4px; border: 1px solid var(--line); border-radius: 8px; background: var(--inset); color: var(--text); font-size: 12px; }
 .attach-chip img { width: 22px; height: 22px; object-fit: cover; border-radius: 4px; }
@@ -1359,3 +1394,47 @@ i.thread-badge.dot {
 .tree-confirm .confirm-no { color: var(--muted); }
 .tree-confirm .confirm-no:hover { color: var(--text); }
 
+
+/* 用量统计。卡片网格 + 活跃热力图，放在设置页最上面。 */
+.usage-stats { display: flex; flex-direction: column; gap: 12px; }
+.usage-loading {
+  display: flex; align-items: center; gap: 8px;
+  padding: 18px 4px; color: var(--muted); font-size: 13px;
+}
+.usage-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.usage-head h3 { margin: 0; font-size: 14px; }
+.usage-ranges { display: inline-flex; gap: 2px; padding: 2px; border-radius: 8px; background: var(--inset); }
+.usage-ranges button {
+  padding: 3px 10px; border-radius: 6px;
+  color: var(--muted); background: transparent; font-size: 12px;
+}
+.usage-ranges button.on { color: var(--text); background: var(--panel, #fff); font-weight: 600; }
+.usage-error { margin: 0; color: var(--red); font-size: 12px; }
+
+.usage-grid {
+  display: grid; gap: 8px;
+  grid-template-columns: repeat(auto-fit, minmax(132px, 1fr));
+}
+.usage-card {
+  display: flex; flex-direction: column; gap: 2px;
+  padding: 10px 12px; border-radius: 10px; background: var(--inset);
+}
+.usage-card span { color: var(--muted); font-size: 12px; }
+.usage-card strong { font-size: 19px; line-height: 1.2; }
+.usage-card small { color: var(--faint); font-size: 10px; }
+
+/* 热力图：7 行 = 周日到周六，一列一周。 */
+.usage-heatmap { display: flex; flex-direction: column; gap: 3px; }
+.heat-row { display: flex; gap: 3px; }
+.heat {
+  flex: 1 1 0; aspect-ratio: 1; min-width: 7px; max-width: 15px;
+  border-radius: 3px; background: var(--line);
+}
+/* -1 是还没到的日子：留白，不能画成「那天没用」。 */
+.heat.level--1 { background: transparent; }
+.heat.level-0 { background: var(--line); opacity: .55; }
+.heat.level-1 { background: var(--accent, #d97757); opacity: .28; }
+.heat.level-2 { background: var(--accent, #d97757); opacity: .5; }
+.heat.level-3 { background: var(--accent, #d97757); opacity: .75; }
+.heat.level-4 { background: var(--accent, #d97757); }
+.usage-foot { margin: 0; color: var(--faint); font-size: 11px; }

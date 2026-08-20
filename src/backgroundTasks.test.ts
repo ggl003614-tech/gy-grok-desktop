@@ -118,7 +118,8 @@ describe("background task surface", () => {
   });
 
   it("输入栏有状态提示，活动面板有清单", () => {
-    expect(app).toMatch(/tasks-chip/);
+    // 状态从控件栏挪到了输入框下面那行（composer-status）
+    expect(app).toMatch(/composer-status/);
     expect(app).toMatch(/task-list/);
     expect(app).toMatch(/tasksRunning/);
   });

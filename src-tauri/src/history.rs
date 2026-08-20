@@ -470,6 +470,8 @@ pub struct GrokDiskSession {
     pub kind: Option<String>,
     /// 子智能体的角色，比如 general-purpose。
     pub agent_name: Option<String>,
+    /// summary.json 的 current_model_id，用量统计里按模型分组要用。
+    pub model_id: Option<String>,
     pub context_tokens_used: Option<u64>,
     pub context_window_tokens: Option<u64>,
     pub context_window_usage: Option<u64>,
@@ -497,6 +499,7 @@ struct SummaryFile {
     /// 不读它的话，Grok 每起一个子智能体，侧栏就多一条看不懂的线程。
     session_kind: Option<String>,
     agent_name: Option<String>,
+    current_model_id: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -541,6 +544,7 @@ fn read_session_dir(dir: &std::path::Path) -> Option<GrokDiskSession> {
     let has_user_query = summary.num_chat_messages.unwrap_or(0) > 0;
     let kind = summary.session_kind.clone();
     let agent_name = summary.agent_name.clone();
+    let model_id = summary.current_model_id.clone();
     Some(GrokDiskSession {
         session_id,
         title,
@@ -552,6 +556,7 @@ fn read_session_dir(dir: &std::path::Path) -> Option<GrokDiskSession> {
         has_user_query,
         kind,
         agent_name,
+        model_id,
         context_tokens_used: signals.as_ref().and_then(|item| item.context_tokens_used),
         context_window_tokens: signals.as_ref().and_then(|item| item.context_window_tokens),
         context_window_usage: signals.as_ref().and_then(|item| item.context_window_usage),

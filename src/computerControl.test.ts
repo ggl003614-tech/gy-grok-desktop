@@ -12,7 +12,8 @@ describe("computer control surface", () => {
     expect(settings).toMatch(/settings\.computerAllow/);
     expect(settings).toMatch(/settings\.capture\.low/);
     expect(settings).toMatch(/set_computer_control/);
-    expect(app).toMatch(/computer-chip/);
+    // 控制电脑改成了图标开关，不再占一整个词的宽度
+    expect(app).toMatch(/icon-toggle/);
     expect(app).toMatch(/take_screenshot/);
     expect(app).toMatch(/ensure_runtime/);
     expect(app).toMatch(/composer\.computer/);

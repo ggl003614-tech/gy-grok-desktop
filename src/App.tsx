@@ -272,7 +272,11 @@ function readFileAsDataUrl(file: File) {
 
 function formatTokens(value?: number) {
   if (!value) return "0";
-  return value > 999 ? `${(value / 1000).toFixed(1)}k` : String(value);
+  // 只做到 k 的话，4762 万会显示成「47624.1k」—— 截图里就是这个。
+  if (value >= 1_000_000_000) return `${(value / 1_000_000_000).toFixed(1)}B`;
+  if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}M`;
+  if (value > 999) return `${(value / 1000).toFixed(1)}k`;
+  return String(value);
 }
 
 function sessionExportName(session: RemoteSession) {
@@ -3180,7 +3184,7 @@ function App() {
                         ))}
                       </select>
                     </label>
-                    <label>
+                    <label className="quiet-select" title={t("composer.permission")}>
                       <ShieldAlert size={14} />
                       <select
                         aria-label={t("composer.permission")}
@@ -3197,76 +3201,14 @@ function App() {
                     </label>
                     <button
                       type="button"
-                      className={`computer-chip${computerControl ? " on" : ""}`}
+                      className={`icon-toggle${computerControl ? " on" : ""}`}
                       disabled={computerBusy}
                       aria-pressed={computerControl}
                       title={computerControl ? t("composer.computerOff") : t("composer.computerOn")}
                       onClick={() => void toggleComputerControl()}
                     >
-                      <MousePointer2 size={13} />
-                      {t("composer.computer")}
+                      <MousePointer2 size={14} />
                     </button>
-                    {connected && !draftConversation ? (
-                      <span
-                        className="token-chip"
-                        title={t("composer.tokensTitle", {
-                          total: spend.total,
-                          in: spend.input,
-                          out: spend.output,
-                        })}
-                      >
-                        {formatTokens(spend.total)} {t("composer.tokens")}
-                        {contextPercent != null ? (
-                          <em className={contextTight ? "tight" : ""}>
-                            {t("composer.contextPct", { n: contextPercent })}
-                          </em>
-                        ) : null}
-                      </span>
-                    ) : null}
-                    {goalAutoRunning ? (
-                      <button
-                        type="button"
-                        className="goal-chip"
-                        title={t("goal.chipTitle")}
-                        onClick={() => {
-                          goalActiveRef.current = false;
-                          setGoalAutoRunning(false);
-                          setStatusMessage(t("goal.stopped"));
-                        }}
-                      >
-                        <Sparkles size={13} />
-                        {t("goal.chip", { n: goalRoundsRef.current })}
-                      </button>
-                    ) : null}
-                    {backgroundThreadsRunning > 0 ? (
-                      <span className="threads-chip" title={t("composer.threadsRunningTitle")}>
-                        <LoaderCircle size={13} className="spin" />
-                        {t("composer.threadsRunning", { n: backgroundThreadsRunning })}
-                      </span>
-                    ) : null}
-                    {tasksRunning ? (
-                      <button
-                        type="button"
-                        className="tasks-chip"
-                        title={t("tasks.openPanel")}
-                        onClick={() => { setActivityOpen(true); setSidebarTab("activity"); }}
-                      >
-                        <LoaderCircle size={13} className="spin" />
-                        {tasksRunning}
-                      </button>
-                    ) : null}
-                    {connected && !draftConversation && contextTight ? (
-                      <button
-                        type="button"
-                        className="compact-chip"
-                        disabled={busy}
-                        title={t("composer.compactTitle", { n: contextPercent ?? 0 })}
-                        onClick={() => compactContext()}
-                      >
-                        <Minimize2 size={13} />
-                        {t("composer.compact")}
-                      </button>
-                    ) : null}
                     {activeModel?.supportsReasoningEffort &&
                     activeModel.reasoningEfforts.length > 0 ? (
                       <EffortSlider
@@ -3296,13 +3238,79 @@ function App() {
                   )}
                 </div>
               </div>
-              <span className="composer-hint">
-                {draftConversation
-                  ? t("composer.needFolder")
-                  : computerControl
-                    ? t("composer.hintComputer")
-                    : t("composer.hint")}
-              </span>
+              <div className="composer-status">
+                {connected && !draftConversation ? (
+                  <span
+                    className="stat"
+                    title={t("composer.tokensTitle", {
+                      total: spend.total,
+                      in: spend.input,
+                      out: spend.output,
+                    })}
+                  >
+                    {formatTokens(spend.total)} {t("composer.tokens")}
+                    {contextPercent != null ? (
+                      <em className={contextTight ? "tight" : ""}>
+                        {t("composer.contextPct", { n: contextPercent })}
+                      </em>
+                    ) : null}
+                  </span>
+                ) : null}
+                {connected && !draftConversation && contextTight ? (
+                  <button
+                    type="button"
+                    className="stat action warn"
+                    disabled={busy}
+                    title={t("composer.compactTitle", { n: contextPercent ?? 0 })}
+                    onClick={() => compactContext()}
+                  >
+                    <Minimize2 size={12} />
+                    {t("composer.compact")}
+                  </button>
+                ) : null}
+                {goalAutoRunning ? (
+                  <button
+                    type="button"
+                    className="stat action"
+                    title={t("goal.chipTitle")}
+                    onClick={() => {
+                      goalActiveRef.current = false;
+                      setGoalAutoRunning(false);
+                      setStatusMessage(t("goal.stopped"));
+                    }}
+                  >
+                    <Sparkles size={12} />
+                    {t("goal.chip", { n: goalRoundsRef.current })}
+                  </button>
+                ) : null}
+                {backgroundThreadsRunning > 0 ? (
+                  <span className="stat" title={t("composer.threadsRunningTitle")}>
+                    <LoaderCircle size={12} className="spin" />
+                    {t("composer.threadsRunning", { n: backgroundThreadsRunning })}
+                  </span>
+                ) : null}
+                {tasksRunning ? (
+                  <button
+                    type="button"
+                    className="stat action"
+                    title={t("tasks.openPanel")}
+                    onClick={() => {
+                      setActivityOpen(true);
+                      setSidebarTab("activity");
+                    }}
+                  >
+                    <LoaderCircle size={12} className="spin" />
+                    {tasksRunning}
+                  </button>
+                ) : null}
+                <span className="hint">
+                  {draftConversation
+                    ? t("composer.needFolder")
+                    : computerControl
+                      ? t("composer.hintComputer")
+                      : t("composer.hint")}
+                </span>
+              </div>
             </div>
           </>
         )}
