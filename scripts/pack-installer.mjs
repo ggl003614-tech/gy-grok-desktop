@@ -30,7 +30,20 @@ if (!found.length) {
   process.exit(1);
 }
 
-const src = join(nsisDir, found[0]);
+// 按版本号精确挑，不能用 found[0] —— nsis 目录里旧版本不会自动清掉，
+// 按字母序 0.1.0 排在 0.2.0 前面，取第一个就会把旧版打成新版发出去。
+const wanted = found.filter((name) => name.includes(`_${version}_`));
+if (wanted.length !== 1) {
+  console.error(
+    `nsis 目录里没有恰好一个 ${version} 的安装包（找到 ${wanted.length} 个）。` +
+    `
+目录内容：${found.join(", ")}` +
+    `
+先跑：npx tauri build`,
+  );
+  process.exit(1);
+}
+const src = join(nsisDir, wanted[0]);
 const outName = `GY-Grok-${version}-Setup.exe`;
 mkdirSync(distDir, { recursive: true });
 const dest = join(distDir, outName);
@@ -79,6 +92,13 @@ writeFileSync(join(distDir, "安装说明.txt"), [
   "  https://github.com/ggl003614-tech/gy-grok-desktop",
   "",
 ].join("\r\n"), "utf8");
+// 加 BOM：Windows 记事本没有 BOM 时按系统 ANSI 码页读，中文会变乱码。
+// 收件人双击打开看到的第一眼就是这个文件，不能让它糊掉。
+const noticePath = join(distDir, "安装说明.txt");
+writeFileSync(noticePath, Buffer.concat([
+  Buffer.from([0xef, 0xbb, 0xbf]),
+  readFileSync(noticePath),
+]));
 
 console.log(`GY Grok v${version} 安装包\n`);
 console.log(`  ${dest}`);
