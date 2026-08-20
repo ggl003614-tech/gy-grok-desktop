@@ -3721,12 +3721,24 @@ function TimelineCard({ item, project }: { item: TimelineItem; project?: string 
         </details>
       );
     }
+    const reminders = item.reminders?.length ? (
+      <details className="harness-item">
+        <summary>{t("timeline.systemNotice", { n: item.reminders.length })}</summary>
+        <pre>{item.reminders.join("\n\n———\n\n")}</pre>
+      </details>
+    ) : null;
+    // 整条消息只有系统通知（后台任务跑完那种）：不摆「你」的气泡，
+    // 那不是人说的话。
+    if (!item.text.trim() && !item.images?.length) return reminders;
     return (
-      <div className="message user-message">
-        <div className="message-label">{t("you")}</div>
-        <ConversationImages images={item.images} project={project} />
-        {item.text ? <p>{item.text}</p> : null}
-      </div>
+      <>
+        <div className="message user-message">
+          <div className="message-label">{t("you")}</div>
+          <ConversationImages images={item.images} project={project} />
+          {item.text ? <p>{item.text}</p> : null}
+        </div>
+        {reminders}
+      </>
     );
   }
   if (item.kind === "assistant") {

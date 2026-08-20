@@ -9,6 +9,7 @@ import {
   redactForDisplay,
   toolSummary,
   isHarnessPrompt,
+  splitSystemReminders,
 } from "./sessionUpdates";
 
 describe("ACP session updates", () => {
@@ -328,5 +329,75 @@ describe("goal 内部指令识别", () => {
       content: { type: "text", text: "继续修那个按钮" },
     });
     if (normal.kind === "chunk") expect(normal.item.harness).toBeUndefined();
+  });
+});
+
+describe("系统通知从正文里拆出来", () => {
+  it("后台任务完成通知不该出现在你的气泡里", () => {
+    const raw =
+      '好了吗\n<system-reminder>\nBackground task "01a01aea" completed (exit code: 1).\nCommand: pnpm.cmd dev | Duration: 411.5s\n</system-reminder>';
+    const { visible, reminders } = splitSystemReminders(raw);
+    expect(visible).toBe("好了吗");
+    expect(reminders).toHaveLength(1);
+    expect(reminders[0]).toContain("exit code: 1");
+  });
+
+  it("多个块都拆走，正文拼回去", () => {
+    const { visible, reminders } = splitSystemReminders(
+      "前面<user_info>os=win</user_info>中间<system-reminder>x</system-reminder>后面",
+    );
+    expect(visible).toBe("前面中间后面");
+    expect(reminders).toEqual(["os=win", "x"]);
+  });
+
+  it("标签没闭合时剩下的整段都算通知，不给用户看半截 XML", () => {
+    const { visible, reminders } = splitSystemReminders("在吗<system-reminder>断了的通知");
+    expect(visible).toBe("在吗");
+    expect(reminders).toEqual(["断了的通知"]);
+  });
+
+  it("没有通知时正文原样返回", () => {
+    expect(splitSystemReminders("帮我改个按钮")).toEqual({
+      visible: "帮我改个按钮",
+      reminders: [],
+    });
+  });
+
+  it("解析时通知挂到 reminders，不进 text", () => {
+    const parsed = parseSessionUpdate({
+      sessionUpdate: "user_message_chunk",
+      content: { type: "text", text: "好了吗<system-reminder>后台任务完成</system-reminder>" },
+    });
+    if (parsed.kind === "chunk") {
+      expect(parsed.item.text).toBe("好了吗");
+      expect(parsed.item.reminders).toEqual(["后台任务完成"]);
+    }
+  });
+});
+
+describe("用户消息不跨助手回复合并（回归）", () => {
+  const chunk = (text: string) =>
+    parseSessionUpdate({ sessionUpdate: "user_message_chunk", content: { type: "text", text } });
+
+  it("注入的用户消息不该粘到更早那条上", () => {
+    // 这是真出过的 bug：lastStreamingIndex 会跳过 assistant 往回找同类，
+    // 于是系统通知糊到了用户几轮之前的气泡里。
+    let items = applyParsedUpdate([], chunk("好了吗"));
+    items = applyParsedUpdate(items, {
+      kind: "chunk",
+      item: { id: "a", kind: "assistant", text: "在弄了" },
+    });
+    items = applyParsedUpdate(items, chunk("它没有自动打开网页"));
+    expect(items).toHaveLength(3);
+    expect(items[0].text).toBe("好了吗");
+    expect(items[2].text).toBe("它没有自动打开网页");
+  });
+
+  it("助手正文照旧跨过推理块合并（原来的修复不能破）", () => {
+    let items = applyParsedUpdate([], { kind: "chunk", item: { id: "a", kind: "assistant", text: "前半" } });
+    items = applyParsedUpdate(items, { kind: "chunk", item: { id: "t", kind: "thought", text: "想想" } });
+    items = applyParsedUpdate(items, { kind: "chunk", item: { id: "b", kind: "assistant", text: "后半" } });
+    expect(items.filter((i) => i.kind === "assistant")).toHaveLength(1);
+    expect(items.find((i) => i.kind === "assistant")!.text).toBe("前半后半");
   });
 });

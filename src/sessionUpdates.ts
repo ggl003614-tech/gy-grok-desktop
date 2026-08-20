@@ -25,6 +25,8 @@ export interface TimelineItem {
   /** goal 驱动器注入的内部指令（Summarizer / Plan Writer / 验证器提示词）。
    *  它们走 user_message_chunk 混进来，界面上会冒充「你」说的话，要折叠。 */
   harness?: boolean;
+  /** CLI 注入的系统通知（后台任务完成、user_info 等），从正文里拆出来单独折叠。 */
+  reminders?: string[];
   raw?: JsonObject;
 }
 
@@ -287,6 +289,45 @@ function contentText(content: unknown): string {
  * 只能按文案特征认。特征来自真实数据：本机数据库里被污染的会话标题、
  * 以及用户截图里的原文（"You are the Goal Summarizer for the xAI Grok Build harness"）。
  */
+/** CLI 会把这些块塞进用户消息里，它们不是人说的话。 */
+const REMINDER_TAGS = ["system-reminder", "system_reminder", "user_info", "system-instruction"];
+
+/**
+ * 把系统通知从用户正文里拆出来。
+ *
+ * 后台任务跑完时，CLI 会往下一条用户消息里塞一段 <system-reminder>…</system-reminder>，
+ * 于是界面上「你」的气泡里就出现一大段 exit code、命令行和环境变量。
+ * 从磁盘导历史那条路早就在过滤了（grokHistory.ts），但实时这条一直没有；
+ * 而且实时不能像历史那样整条丢掉 —— 人真正打的字跟通知在同一条消息里。
+ */
+export function splitSystemReminders(text: string): { visible: string; reminders: string[] } {
+  const reminders: string[] = [];
+  let rest = text;
+  let visible = "";
+  for (;;) {
+    const opens = REMINDER_TAGS.map((tag) => ({ tag, at: rest.indexOf(`<${tag}>`) }))
+      .filter((entry) => entry.at >= 0)
+      .sort((left, right) => left.at - right.at);
+    const first = opens[0];
+    if (!first) {
+      visible += rest;
+      break;
+    }
+    visible += rest.slice(0, first.at);
+    const after = rest.slice(first.at + first.tag.length + 2);
+    const close = after.indexOf(`</${first.tag}>`);
+    if (close < 0) {
+      // 没有闭合标签：剩下的整段都当通知，别把半截 XML 留给用户看。
+      reminders.push(after.trim());
+      rest = "";
+      break;
+    }
+    reminders.push(after.slice(0, close).trim());
+    rest = after.slice(close + first.tag.length + 3);
+  }
+  return { visible: visible.trim(), reminders: reminders.filter(Boolean) };
+}
+
 export function isHarnessPrompt(text: string): boolean {
   const head = text.trimStart().slice(0, 200);
   if (!head.startsWith("You are ")) return false;
@@ -301,17 +342,19 @@ export function parseSessionUpdate(update: JsonObject): ParsedUpdate {
   const id = crypto.randomUUID();
 
   if (type === "user_message_chunk") {
-    const userText = contentText(update.content);
+    const raw = contentText(update.content);
+    const { visible, reminders } = splitSystemReminders(raw);
     return {
       kind: "chunk",
       item: {
         id,
         kind: "user",
-        harness: isHarnessPrompt(userText) || undefined,
-        text: userText,
+        harness: isHarnessPrompt(visible) || undefined,
+        reminders: reminders.length ? reminders : undefined,
+        text: visible,
         images: mergeTimelineImages(
           imagesFromContent(update.content),
-          imagesFromMarkdown(userText),
+          imagesFromMarkdown(visible),
         ),
       },
     };
@@ -524,12 +567,24 @@ export function applyParsedUpdate(
       return [...items.slice(0, -1), {
         ...last,
         images: last.images?.length ? last.images : item.images,
+        // 回显本身丢掉（本地那条是权威的），但跟车来的系统通知要留下。
+        reminders: item.reminders?.length
+          ? [...(last.reminders ?? []), ...item.reminders]
+          : last.reminders,
       }];
     }
     // Grok 是「正文→推理→正文→推理」交替流出来的。只看最后一条的话，
     // 每交替一次正文就断成新的一条，一段回答会碎成十几个气泡。
     // 所以往回找同类时跳过另一种流式项，正文归正文、推理归推理。
-    const index = lastStreamingIndex(items, item.kind);
+    //
+    // 但这只对流式项成立。user 不能这么找 —— 注入型的用户消息（系统通知、
+    // goal 指令）会跨过中间的助手回复，粘到人更早的那条消息上，
+    // 几条不相干的话糊成一个气泡。它只跟紧挨着的上一条合并。
+    const index = STREAMING_KINDS.has(item.kind)
+      ? lastStreamingIndex(items, item.kind)
+      : last?.kind === item.kind
+        ? items.length - 1
+        : -1;
     if (index >= 0) {
       const previous = items[index];
       const next = [...items];
@@ -537,6 +592,9 @@ export function applyParsedUpdate(
         ...previous,
         text: previous.text + item.text,
         images: [...(previous.images ?? []), ...(item.images ?? [])],
+        reminders: [...(previous.reminders ?? []), ...(item.reminders ?? [])].length
+          ? [...(previous.reminders ?? []), ...(item.reminders ?? [])]
+          : undefined,
       };
       return next;
     }
