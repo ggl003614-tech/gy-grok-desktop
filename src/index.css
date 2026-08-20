@@ -105,12 +105,70 @@
   --terminal-fg: #ededeb;
 }
 
+/* Inter 只带拉丁字形，中文会自动落到栈里的下一位 —— 这正是混排该有的行为：
+   英文和数字走 Inter，汉字走 Noto Sans SC / 思源黑体。
+   本地 woff2，不连 CDN（这是桌面应用，不能依赖网络）。 */
+@font-face {
+  /* 内嵌的中文字体。故意不叫 "Noto Sans SC" —— 系统里可能装着同名的另一份，
+     重名会让浏览器优先用系统那份，内嵌就白搭了。
+     这是 Noto Sans SC 可变字体的子集：GB2312 一级字库 3755 字 + 界面全部用字，
+     17.7MB 砍到 1.07MB。授权 SIL OFL 1.1，见 src/assets/fonts/OFL.txt。 */
+  font-family: "GY Sans SC";
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url("./assets/fonts/noto-sans-sc-subset.woff2") format("woff2-variations");
+}
+
+@font-face {
+  font-family: "Inter";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("./assets/fonts/inter-400.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Inter";
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("./assets/fonts/inter-500.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Inter";
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url("./assets/fonts/inter-600.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Inter";
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("./assets/fonts/inter-700.woff2") format("woff2");
+}
+
 :root {
-  font-family: "Segoe UI Variable", "Microsoft YaHei UI", "Segoe UI", sans-serif;
+  /* 微软雅黑排最后 —— 它字重过粗、字距不匀，是原来"字丑"的来源。
+     前面几位任意一个命中都比它好；雅黑只做兜底。 */
+  /* 拉丁走 Inter，汉字走内嵌的 GY Sans SC。两个都是打包进去的，
+     不依赖用户机器上装了什么 —— 实测系统里的 Noto Sans SC 装在用户目录，
+     WebView 根本枚举不到，只靠字体栈是无效的。后面几位纯兜底。 */
+  --font-ui: "Inter", "GY Sans SC", "PingFang SC", "Microsoft YaHei UI",
+    "Microsoft YaHei", system-ui, sans-serif;
+  --font-mono: "Cascadia Mono", "SF Mono", "JetBrains Mono", Consolas,
+    "Noto Sans Mono", monospace;
+
+  font-family: var(--font-ui);
   color: var(--text);
   background: var(--bg);
   font-synthesis: none;
   text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  /* 数字等宽，状态栏那些计数不会随数值跳动 */
+  font-variant-numeric: tabular-nums;
 }
 
 * { box-sizing: border-box; }

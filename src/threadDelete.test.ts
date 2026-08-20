@@ -51,3 +51,37 @@ describe("thread deletion surface", () => {
     expect(css).toMatch(/\.tree-confirm/);
   });
 });
+
+describe("界面细节修复（回归防线）", () => {
+  const app = readFileSync(join(root, "App.tsx"), "utf8");
+  const settings = readFileSync(join(root, "SettingsPanel.tsx"), "utf8");
+  const i18n = readFileSync(join(root, "i18n.ts"), "utf8");
+
+  it("路径占位符不带双反斜杠", () => {
+    // JSX 属性里的字符串不处理转义，写成 "C:\path" 会原样显示两道斜杠。
+    // 这里用字符串比较而不是正则 —— 正则里 \p、	 会被当成转义序列。
+    const doubled = "placeholder=" + '"' + "C:" + "\\".repeat(2) + "path";
+    expect(app.includes(doubled)).toBe(false);
+    expect(app.includes("String.raw`C:" + "\\" + "path" + "\\" + "to" + "\\" + "project`")).toBe(true);
+  });
+
+  it("装不上时不再把同一句话说三遍", () => {
+    // 红框副标题固定给「怎么办」，原始报错单独一行且可能不出现
+    expect(app).toMatch(/<span>\{t\("welcome\.missingHint"\)\}<\/span>/);
+    expect(app).toMatch(/setup-detail/);
+    // 标题栏的兜底状态换成短句，跟红框标题不再同义
+    expect(app).not.toMatch(/未能安装官方 Grok Build/);
+  });
+
+  it("检查更新接了后端命令，并且不跟 Grok CLI 的更新混淆", () => {
+    expect(settings).toMatch(/invoke<UpdateCheck>\("check_app_update"\)/);
+    for (const key of ["settings.checkUpdate", "settings.updateLatest", "settings.updateFound"]) {
+      expect(i18n.split(`"${key}"`).length - 1).toBe(2);
+    }
+  });
+
+  it("模型和目标用了各自的图标，不再共用 Sparkles", () => {
+    expect(app).toMatch(/<Sparkles size=\{14\} \/>\s*\n\s*<select/);
+    expect(app).toMatch(/<Target size=\{12\} \/>/);
+  });
+});

@@ -39,6 +39,7 @@ import {
   ShieldAlert,
   Square,
   Sparkles,
+  Target,
   TerminalSquare,
   Trash2,
   Wrench,
@@ -811,7 +812,7 @@ function App() {
         const result = await invoke<GrokStatus>("ensure_runtime");
         if (!result.available) {
           setConnection("missing");
-          setStatusMessage(result.error || "未能安装官方 Grok Build");
+          setStatusMessage(result.error || t("status.installFailed"));
           return;
         }
         setGrokVersion(result.version ?? "Grok Build");
@@ -848,7 +849,7 @@ function App() {
       void stopBootstrap.then((unlisten) => unlisten());
       void client.dispose();
     };
-  }, [addError, appendDebug, client, handleNotification, refreshCredits]);
+  }, [addError, appendDebug, client, handleNotification, refreshCredits, t]);
 
   useEffect(() => {
     if (!account?.authenticated && !connectionInfo) return;
@@ -2908,7 +2909,10 @@ function App() {
                 <AlertCircle size={20} />
                 <div>
                   <strong>{t("welcome.missing")}</strong>
-                  <span>{statusMessage || t("welcome.missingHint")}</span>
+                  <span>{t("welcome.missingHint")}</span>
+                  {statusMessage && statusMessage !== t("status.installFailed") ? (
+                    <em className="setup-detail">{statusMessage}</em>
+                  ) : null}
                 </div>
                 <button
                   className="secondary-action compact"
@@ -2917,7 +2921,7 @@ function App() {
                     void invoke<GrokStatus>("ensure_runtime")
                       .then((result) => {
                         if (result.available) window.location.reload();
-                        else setStatusMessage(result.error || "安装仍失败");
+                        else setStatusMessage(result.error || t("status.installFailed"));
                       })
                       .catch((error) => setStatusMessage(String(error)));
                   }}
@@ -2972,7 +2976,7 @@ function App() {
                         void connectProject(manualProject.trim());
                       }
                     }}
-                    placeholder="C:\\path\\to\\project"
+                    placeholder={String.raw`C:\path\to\project`}
                     aria-label={t("welcome.projectPath")}
                     spellCheck={false}
                   />
@@ -3170,7 +3174,7 @@ function App() {
                       onOpenExtensions={() => setWorkspacePage("extensions")}
                     />
                     <label>
-                      <Bot size={14} />
+                      <Sparkles size={14} />
                       <select
                         aria-label={t("composer.model")}
                         value={selectedModel}
@@ -3279,7 +3283,7 @@ function App() {
                       setStatusMessage(t("goal.stopped"));
                     }}
                   >
-                    <Sparkles size={12} />
+                    <Target size={12} />
                     {t("goal.chip", { n: goalRoundsRef.current })}
                   </button>
                 ) : null}

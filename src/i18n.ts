@@ -477,6 +477,14 @@ const zh: Dict = {
   "usage.days": "{n} 天",
   "usage.hour": "{n} 点",
   "usage.heatmapNote": "最近 20 周，颜色越深那天聊得越多。子智能体不计入。",
+  "status.installFailed": "安装失败",
+  "settings.checkUpdate": "检查更新",
+  "settings.currentVersion": "当前 {v}",
+  "settings.updateLatest": "已经是最新版本。",
+  "settings.updateFound": "有新版本 {v}。",
+  "settings.updateOpen": "去看看",
+  "settings.updateNoRelease": "仓库还没发布过版本。",
+  "settings.updateFailed": "没查成：{reason}",
 };
 
 const en: Dict = {
@@ -952,6 +960,14 @@ const en: Dict = {
   "usage.days": "{n}d",
   "usage.hour": "{n}:00",
   "usage.heatmapNote": "Last 20 weeks — darker means more messages that day. Subagents excluded.",
+  "status.installFailed": "Install failed",
+  "settings.checkUpdate": "Check for updates",
+  "settings.currentVersion": "Current {v}",
+  "settings.updateLatest": "You are on the latest version.",
+  "settings.updateFound": "Version {v} is available.",
+  "settings.updateOpen": "View release",
+  "settings.updateNoRelease": "No releases published yet.",
+  "settings.updateFailed": "Check failed: {reason}",
 };
 
 const tables: Record<Locale, Dict> = { zh, en };

@@ -1445,3 +1445,21 @@ i.thread-badge.dot {
 .heat.level-3 { background: var(--accent, #d97757); opacity: .75; }
 .heat.level-4 { background: var(--accent, #d97757); }
 .usage-foot { margin: 0; color: var(--faint); font-size: 11px; }
+
+/* 检查更新那一行，以及欢迎页错误卡的技术细节。 */
+.update-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.update-current { color: var(--muted); font-size: 12px; }
+.update-result { margin: 8px 0 0; color: var(--muted); font-size: 12px; }
+.update-result.newer { color: var(--text); font-weight: 600; }
+.update-result .link-button {
+  margin-left: 8px; padding: 0; color: var(--accent, #d97757);
+  background: transparent; font-size: 12px; text-decoration: underline; cursor: pointer;
+}
+/* 装不上时的技术细节。标题说发生了什么、副标题说怎么办，这行才是原始报错，
+   没有具体原因时整行不出现 —— 避免同一句话在界面上出现三遍。 */
+.setup-detail {
+  display: block; margin-top: 4px;
+  color: var(--faint); font-size: 11px; font-style: normal;
+  font-family: var(--font-mono, monospace);
+  word-break: break-word;
+}

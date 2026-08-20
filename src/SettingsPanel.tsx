@@ -4,6 +4,8 @@ import { invoke } from "@tauri-apps/api/core";
 import { save } from "@tauri-apps/plugin-dialog";
 import {
   BellRing,
+  LoaderCircle,
+  RefreshCw,
   Bot,
   Check,
   Eye,
@@ -71,6 +73,15 @@ async function saveSetting(key: string, value: unknown) {
   await invoke("set_setting", { key, value });
 }
 
+interface UpdateCheck {
+  current: string;
+  latest?: string;
+  newer: boolean;
+  url?: string;
+  notes?: string;
+  error?: string;
+}
+
 export function SettingsPanel({
   theme,
   models,
@@ -103,6 +114,21 @@ export function SettingsPanel({
 }: SettingsPanelProps) {
   const [telemetry, setTelemetry] = useState(false);
   const [updateChannel, setUpdateChannel] = useState("stable");
+  const [updateInfo, setUpdateInfo] = useState<UpdateCheck | null>(null);
+  const [updateBusy, setUpdateBusy] = useState(false);
+
+  // 查 GitHub Releases 有没有更新。查不到网络或仓库还没发版都不算错误，
+  // 后端会把原因放在 error 里，这里照实说明，不弹红字。
+  const runUpdateCheck = async () => {
+    setUpdateBusy(true);
+    try {
+      setUpdateInfo(await invoke<UpdateCheck>("check_app_update"));
+    } catch (error) {
+      setUpdateInfo({ current: "0.1.0", newer: false, error: String(error) });
+    } finally {
+      setUpdateBusy(false);
+    }
+  };
   const [computerControl, setComputerControl] = useState(true);
   const [captureDetail, setCaptureDetail] = useState("low");
   const [computerBusy, setComputerBusy] = useState(false);
@@ -367,6 +393,29 @@ export function SettingsPanel({
         <section className="settings-section">
           <div className="settings-section-title"><BellRing size={16} /><div><strong>{t("settings.updates")}</strong><span>{t("settings.updatesHint")}</span></div></div>
           <div className="settings-fields"><label><span>{t("settings.channel")}</span><select value={updateChannel} onChange={(event) => { const value = event.target.value; setUpdateChannel(value); void persist("updates.channel", value, t("saved.updates")); }}><option value="stable">{t("settings.channel.stable")}</option><option value="preview">{t("settings.channel.preview")}</option></select></label></div>
+          <div className="update-row">
+            <button className="secondary-action" disabled={updateBusy} onClick={() => void runUpdateCheck()}>
+              {updateBusy ? <LoaderCircle size={14} className="spin" /> : <RefreshCw size={14} />}
+              {t("settings.checkUpdate")}
+            </button>
+            <span className="update-current">{t("settings.currentVersion", { v: updateInfo?.current ?? "0.1.0" })}</span>
+          </div>
+          {updateInfo ? (
+            <p className={`update-result${updateInfo.newer ? " newer" : ""}`}>
+              {updateInfo.error === "no-release"
+                ? t("settings.updateNoRelease")
+                : updateInfo.error
+                  ? t("settings.updateFailed", { reason: updateInfo.error })
+                  : updateInfo.newer
+                    ? t("settings.updateFound", { v: updateInfo.latest ?? "" })
+                    : t("settings.updateLatest")}
+              {updateInfo.newer && updateInfo.url ? (
+                <button className="link-button" onClick={() => void invoke("open_external_url", { url: updateInfo.url })}>
+                  {t("settings.updateOpen")}
+                </button>
+              ) : null}
+            </p>
+          ) : null}
         </section>
 
         <section className="settings-section">
