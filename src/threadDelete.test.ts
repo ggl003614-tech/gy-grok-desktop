@@ -98,6 +98,16 @@ describe("界面细节修复（回归防线）", () => {
     expect(composer).toMatch(/<QuietSelect/);
   });
 
+  it("下拉菜单 portal 到 body —— 留在原地会被 overflow:hidden 裁掉", () => {
+    // 真出过的 bug：.model-controls 上有 overflow: hidden，菜单作为它的后代
+    // 被整个裁掉，点了有反应但什么都看不见，表现得像按钮失灵。
+    const quiet = readFileSync(join(root, "QuietSelect.tsx"), "utf8");
+    expect(quiet).toMatch(/createPortal\(/);
+    expect(quiet).toMatch(/document\.body/);
+    // portal 出去之后必须自己定位，absolute 会相对 body 而不是按钮
+    expect(css).toMatch(/\.quiet-menu\s*\{[^}]*position: fixed/);
+  });
+
   it("聚焦时靠淡环表示，不把边框拉到近黑色", () => {
     expect(css).toMatch(/--focus-ring/);
     expect(css).not.toMatch(/\.composer:focus-within \{ border-color: var\(--text-2\); \}/);
