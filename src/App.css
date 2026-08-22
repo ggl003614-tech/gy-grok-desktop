@@ -1509,3 +1509,10 @@ i.thread-badge.dot {
   font-family: var(--font-mono, monospace);
   word-break: break-word;
 }
+
+/* CLI 那一行跟应用更新那行之间留道分隔 —— 它们是两个不同的东西，
+   一个是这个界面，一个是官方 grok 命令行，视觉上要分得开。 */
+.update-row.cli-row {
+  margin-top: 10px; padding-top: 10px;
+  border-top: 1px solid var(--line);
+}

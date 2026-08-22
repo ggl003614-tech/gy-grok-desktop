@@ -73,6 +73,13 @@ async function saveSetting(key: string, value: unknown) {
   await invoke("set_setting", { key, value });
 }
 
+interface CliUpdateCheck {
+  current?: string;
+  latest?: string;
+  newer: boolean;
+  error?: string;
+}
+
 interface UpdateCheck {
   current: string;
   latest?: string;
@@ -116,9 +123,24 @@ export function SettingsPanel({
   const [updateChannel, setUpdateChannel] = useState("stable");
   const [updateInfo, setUpdateInfo] = useState<UpdateCheck | null>(null);
   const [updateBusy, setUpdateBusy] = useState(false);
+  const [cliInfo, setCliInfo] = useState<CliUpdateCheck | null>(null);
+  const [cliBusy, setCliBusy] = useState(false);
 
   // 查 GitHub Releases 有没有更新。查不到网络或仓库还没发版都不算错误，
   // 后端会把原因放在 error 里，这里照实说明，不弹红字。
+  // CLI 的版本跟本应用是两码事：一个是这个界面，一个是官方 grok 命令行。
+  // 分开查、分开显示，免得用户以为点一下两个都更新了。
+  const runCliCheck = async () => {
+    setCliBusy(true);
+    try {
+      setCliInfo(await invoke<CliUpdateCheck>("check_cli_update"));
+    } catch (error) {
+      setCliInfo({ newer: false, error: String(error) });
+    } finally {
+      setCliBusy(false);
+    }
+  };
+
   const runUpdateCheck = async () => {
     setUpdateBusy(true);
     try {
@@ -400,6 +422,26 @@ export function SettingsPanel({
             </button>
             <span className="update-current">{t("settings.currentVersion", { v: updateInfo?.current ?? "0.1.0" })}</span>
           </div>
+          <div className="update-row cli-row">
+            <button className="secondary-action" disabled={cliBusy} onClick={() => void runCliCheck()}>
+              {cliBusy ? <LoaderCircle size={14} className="spin" /> : <RefreshCw size={14} />}
+              {t("settings.checkCli")}
+            </button>
+            <span className="update-current">
+              {cliInfo?.current
+                ? t("settings.cliCurrent", { v: cliInfo.current })
+                : t("settings.cliUnknown")}
+            </span>
+          </div>
+          {cliInfo ? (
+            <p className={`update-result${cliInfo.newer ? " newer" : ""}`}>
+              {cliInfo.error
+                ? t("settings.cliFailed", { reason: cliInfo.error })
+                : cliInfo.newer
+                  ? t("settings.cliFound", { v: cliInfo.latest ?? "" })
+                  : t("settings.cliLatest")}
+            </p>
+          ) : null}
           {updateInfo ? (
             <p className={`update-result${updateInfo.newer ? " newer" : ""}`}>
               {updateInfo.error === "no-release"

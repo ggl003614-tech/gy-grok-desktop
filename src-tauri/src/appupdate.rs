@@ -133,6 +133,63 @@ pub async fn check_app_update() -> Result<UpdateCheck, String> {
     }
 }
 
+/// CLI 那边的版本情况。跟本应用的更新是两码事 —— 一个是这个 GUI，
+/// 一个是官方的 grok 命令行，用户很容易混，所以界面上分两块显示。
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CliUpdateCheck {
+    /// 本机装的版本。`grok --version` 输出形如 "grok 1.0.5 (5115b46bc9)"。
+    pub current: Option<String>,
+    /// 官方稳定版频道上的版本，纯数字串如 "1.0.5"。
+    pub latest: Option<String>,
+    pub newer: bool,
+    pub error: Option<String>,
+}
+
+/// 从 `grok --version` 的输出里取版本号。
+/// 输出是 "grok 1.0.5 (5115b46bc9)"，取第一个像版本号的段。
+pub fn parse_cli_version(raw: &str) -> Option<String> {
+    raw.split_whitespace()
+        .find(|part| part.chars().next().is_some_and(|c| c.is_ascii_digit()) && part.contains('.'))
+        .map(|part| {
+            part.trim_matches(|c: char| !c.is_ascii_alphanumeric() && c != '.')
+                .to_string()
+        })
+        .filter(|part| !part.is_empty())
+}
+
+#[tauri::command]
+pub async fn check_cli_update() -> Result<CliUpdateCheck, String> {
+    let status = crate::cli::check_grok().await;
+    let current = status.version.as_deref().and_then(parse_cli_version);
+
+    let latest = tokio::task::spawn_blocking(crate::bootstrap::resolve_version)
+        .await
+        .map_err(|error| format!("检查 CLI 更新任务中断：{error}"))?;
+
+    match latest {
+        Ok((version, _base)) => {
+            let newer = current
+                .as_deref()
+                .map(|now| is_newer(&version, now))
+                // 读不到本机版本时不敢说「有更新」—— 那会让人白跑一趟。
+                .unwrap_or(false);
+            Ok(CliUpdateCheck {
+                current,
+                latest: Some(version),
+                newer,
+                error: None,
+            })
+        }
+        Err(reason) => Ok(CliUpdateCheck {
+            current,
+            latest: None,
+            newer: false,
+            error: Some(reason),
+        }),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -167,5 +224,27 @@ mod tests {
         assert!(!is_newer("", "0.1.0"));
         assert!(!is_newer("latest", "0.1.0"));
         assert!(!is_newer("not-a-version", "0.1.0"));
+    }
+
+    #[test]
+    fn reads_version_out_of_cli_banner() {
+        // 真实输出："grok 1.0.5 (5115b46bc9)"
+        assert_eq!(
+            parse_cli_version("grok 1.0.5 (5115b46bc9)").as_deref(),
+            Some("1.0.5")
+        );
+        assert_eq!(parse_cli_version("grok 1.0.5").as_deref(), Some("1.0.5"));
+        assert_eq!(
+            parse_cli_version("  grok  2.10.3-beta  ").as_deref(),
+            Some("2.10.3-beta")
+        );
+    }
+
+    #[test]
+    fn cli_banner_without_a_version_yields_none() {
+        assert_eq!(parse_cli_version("grok"), None);
+        assert_eq!(parse_cli_version(""), None);
+        // 提交哈希不带点，不能被当成版本号
+        assert_eq!(parse_cli_version("grok (5115b46bc9)"), None);
     }
 }

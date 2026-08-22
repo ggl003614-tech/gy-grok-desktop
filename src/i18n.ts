@@ -485,6 +485,12 @@ const zh: Dict = {
   "settings.updateOpen": "去看看",
   "settings.updateNoRelease": "仓库还没发布过版本。",
   "settings.updateFailed": "没查成：{reason}",
+  "settings.checkCli": "检查 Grok CLI 更新",
+  "settings.cliCurrent": "CLI 当前 {v}",
+  "settings.cliUnknown": "CLI 版本未知",
+  "settings.cliLatest": "Grok CLI 已经是最新版本。",
+  "settings.cliFound": "Grok CLI 有新版本 {v}，在终端运行 grok update 升级。",
+  "settings.cliFailed": "没查成：{reason}",
 };
 
 const en: Dict = {
@@ -968,6 +974,12 @@ const en: Dict = {
   "settings.updateOpen": "View release",
   "settings.updateNoRelease": "No releases published yet.",
   "settings.updateFailed": "Check failed: {reason}",
+  "settings.checkCli": "Check Grok CLI updates",
+  "settings.cliCurrent": "CLI {v}",
+  "settings.cliUnknown": "CLI version unknown",
+  "settings.cliLatest": "Grok CLI is up to date.",
+  "settings.cliFound": "Grok CLI {v} is available — run grok update in a terminal.",
+  "settings.cliFailed": "Check failed: {reason}",
 };
 
 const tables: Record<Locale, Dict> = { zh, en };

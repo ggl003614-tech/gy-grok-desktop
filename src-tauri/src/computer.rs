@@ -92,14 +92,26 @@ pub fn control_state_path() -> PathBuf {
         .join("computer-control.json")
 }
 
-pub fn gate_enabled() -> bool {
-    let Ok(text) = fs::read_to_string(control_state_path()) else {
+/// 开关文件的内容 -> 是否放行。抽成纯函数是为了能确定性地测 ——
+/// 原来测试直接调 gate_enabled()，读的是真实 APPDATA 路径，
+/// 本机有那个文件时断言被 if 跳过、CI 干净机器上才真跑，于是本地绿、CI 红。
+///
+/// 三种情况的落点是有意为之，不是笔误：
+///   - 没有文件：开。这是首次运行，设置页写明「默认打开」。
+///   - 文件损坏：关。读不懂就不敢放行。
+///   - 文件正常：按里面的 enabled 字段。
+pub fn gate_from_state(contents: Option<&str>) -> bool {
+    let Some(text) = contents else {
         return true;
     };
-    let Ok(value) = serde_json::from_str::<serde_json::Value>(&text) else {
+    let Ok(value) = serde_json::from_str::<serde_json::Value>(text) else {
         return false;
     };
     value.get("enabled").and_then(|item| item.as_bool()) == Some(true)
+}
+
+pub fn gate_enabled() -> bool {
+    gate_from_state(fs::read_to_string(control_state_path()).ok().as_deref())
 }
 
 fn read_control_state() -> serde_json::Value {
@@ -990,10 +1002,24 @@ mod tests {
     }
 
     #[test]
-    fn gate_defaults_to_off_when_file_missing() {
-        // Missing or invalid files must never silently enable computer control.
-        if !control_state_path().exists() {
-            assert!(!gate_enabled());
-        }
+    fn gate_falls_back_to_product_default_when_file_is_missing() {
+        // 首次运行没有这个文件。设置页写明「默认打开」，所以这里是开。
+        assert!(gate_from_state(None));
+    }
+
+    #[test]
+    fn gate_closes_on_unreadable_state() {
+        // 读不懂就不敢放行 —— 损坏的文件不该变成一把敞开的钥匙。
+        assert!(!gate_from_state(Some("{ not json")));
+        assert!(!gate_from_state(Some("")));
+    }
+
+    #[test]
+    fn gate_follows_the_enabled_flag() {
+        assert!(gate_from_state(Some(r#"{"enabled":true}"#)));
+        assert!(!gate_from_state(Some(r#"{"enabled":false}"#)));
+        // 字段缺失或类型不对都按关处理，只有明确的 true 才开
+        assert!(!gate_from_state(Some(r#"{}"#)));
+        assert!(!gate_from_state(Some(r#"{"enabled":"yes"}"#)));
     }
 }

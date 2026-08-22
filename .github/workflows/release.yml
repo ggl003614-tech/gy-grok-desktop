@@ -1,5 +1,11 @@
 name: Release
 
+# 推 v* 标签时自动出安装包并发布。
+#
+# 之前这个工作流里写死了 "Grok Desk_0.1.0_x64-setup.exe" 这类文件名和一份
+# 只对 0.1.0 有效的发布说明，应用改名成 GY Grok、版本升到 0.2.0 之后必然失败，
+# 每推一个标签就给仓库主人发一封失败邮件。现在名字全部从标签和构建产物里取。
+
 on:
   push:
     tags: ["v*"]
@@ -17,35 +23,66 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      - name: Test
+
+      # 跟 CI 同样的四道门。发布用的产物不该比日常提交宽松。
+      - name: Quality gates
         run: |
           npm run lint
           npm test
-          cargo test --manifest-path src-tauri/Cargo.toml
-      - name: Build Windows bundles
-        run: npm run tauri build
-      - name: Create checksums
+          npm run build
+      - name: Rust quality gates
         shell: pwsh
         run: |
-          $files = @(
-            "src-tauri/target/release/grok-desk.exe",
-            "src-tauri/target/release/bundle/msi/Grok Desk_0.1.0_x64_en-US.msi",
-            "src-tauri/target/release/bundle/nsis/Grok Desk_0.1.0_x64-setup.exe"
-          )
-          $lines = foreach ($file in $files) {
+          rustup default stable
+          Push-Location src-tauri
+          cargo fmt -- --check
+          cargo test
+          cargo clippy --all-targets -- -D warnings
+          Pop-Location
+
+      - name: Build Windows bundles
+        run: npx tauri build
+
+      # 产物名里带版本号，按后缀找而不是拼字符串 —— 版本升级时不用改这里。
+      - name: Collect artifacts
+        id: collect
+        shell: pwsh
+        run: |
+          $setup = Get-ChildItem "src-tauri/target/release/bundle/nsis/*.exe" | Select-Object -First 1
+          $msi = Get-ChildItem "src-tauri/target/release/bundle/msi/*.msi" | Select-Object -First 1
+          if (-not $setup) { throw "nsis 目录里没有安装包" }
+          if (-not $msi) { throw "msi 目录里没有安装包" }
+
+          New-Item -ItemType Directory -Force dist-ci | Out-Null
+          $version = "${{ github.ref_name }}" -replace '^v', ''
+          $setupOut = "dist-ci/GY-Grok-$version-Setup.exe"
+          $msiOut = "dist-ci/GY-Grok-$version.msi"
+          Copy-Item $setup.FullName $setupOut
+          Copy-Item $msi.FullName $msiOut
+
+          $lines = foreach ($file in @($setupOut, $msiOut)) {
             $hash = (Get-FileHash -Algorithm SHA256 -LiteralPath $file).Hash.ToLowerInvariant()
             "$hash  $([IO.Path]::GetFileName($file))"
           }
-          Set-Content -LiteralPath SHA256SUMS.txt -Value $lines -Encoding ascii
+          Set-Content -LiteralPath dist-ci/SHA256SUMS.txt -Value $lines -Encoding ascii
+
+      # 手动发过同名 release 时不再报错重复创建，改成把产物补上去。
       - name: Publish GitHub Release
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create $env:GITHUB_REF_NAME `
-            --title "Grok Desk $env:GITHUB_REF_NAME" `
-            --notes-file docs/RELEASE_NOTES_0.1.0.md `
-            "src-tauri/target/release/grok-desk.exe#Grok Desk portable EXE" `
-            "src-tauri/target/release/bundle/msi/Grok Desk_0.1.0_x64_en-US.msi#Grok Desk MSI" `
-            "src-tauri/target/release/bundle/nsis/Grok Desk_0.1.0_x64-setup.exe#Grok Desk NSIS installer" `
-            "SHA256SUMS.txt#SHA-256 checksums"
+          $tag = "${{ github.ref_name }}"
+          $exists = gh release view $tag 2>$null
+          if ($LASTEXITCODE -eq 0) {
+            Write-Host "release $tag 已存在，补充产物"
+            gh release upload $tag --clobber `
+              "dist-ci/GY-Grok-$($tag -replace '^v','')-Setup.exe" `
+              "dist-ci/GY-Grok-$($tag -replace '^v','').msi" `
+              "dist-ci/SHA256SUMS.txt"
+          } else {
+            gh release create $tag --title "GY Grok $tag" --generate-notes `
+              "dist-ci/GY-Grok-$($tag -replace '^v','')-Setup.exe" `
+              "dist-ci/GY-Grok-$($tag -replace '^v','').msi" `
+              "dist-ci/SHA256SUMS.txt"
+          }

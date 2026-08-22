@@ -89,7 +89,9 @@ fn fetch_text(url: &str) -> Result<String, String> {
         .map_err(|error| format!("无法读取官方版本：{error}"))
 }
 
-fn resolve_version() -> Result<(String, &'static str), String> {
+/// 官方稳定版频道上的最新版本号。appupdate 里查 CLI 更新也用这个 ——
+/// 不另开一条网络路径，频道地址的白名单校验只有一处。
+pub fn resolve_version() -> Result<(String, &'static str), String> {
     let mut last = "无法读取官方版本".to_string();
     for url in CHANNEL_URLS {
         match fetch_text(url).and_then(|text| parse_channel_version(&text)) {

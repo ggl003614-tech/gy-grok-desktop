@@ -19,7 +19,7 @@ mod workspace;
 use agent::{
     agent_status, send_agent_message, start_agent, start_agent_advanced, stop_agent, AgentState,
 };
-use appupdate::check_app_update;
+use appupdate::{check_app_update, check_cli_update};
 use attachments::{import_attachments, import_data_url, import_folder};
 use billing::{fetch_account_credits, redeem_usage_reset};
 use bootstrap::ensure_runtime;
@@ -138,6 +138,7 @@ pub fn run() {
             grok_session_usage,
             delete_grok_session,
             check_app_update,
+            check_cli_update,
             list_workspace_directory,
             search_workspace_files,
             read_workspace_file,
